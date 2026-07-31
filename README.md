@@ -1,205 +1,70 @@
-# Asset Planner · 资产配置 & 定投规划工具
+# Asset Planner · 资产统计与定投工具
 
-一个面向移动端的个人资产配置与定投规划工具。支持底仓管理、每日定投计划、品类占比可视化、历史快照对比、自选品种库与云同步。所有数据默认保存在浏览器本地，配置 Supabase 后可开启跨设备云同步。
+一个用来记录和统计个人资产配置、复盘历史持仓、对照每日定投金额的小工具。所有数据只存在你自己的浏览器里，不上传任何服务器。
 
----
+## 这个工具解决什么问题
 
-## 功能总览
+- **资产统计**：把散落在不同账户里的债券、黄金、基金、股票归到一处，按品类看清底仓分布和占比。
+- **复盘对照**：随时保存当前持仓快照，回看任意两天的变化，搞清楚这段时间是加仓了、减仓了、还是涨跌带来的差异。
+- **定投统计**：把每天定投的金额汇总成日定投额、月定投额，对照月薪看自己有没有超支，直观明了。
 
-底部导航共 5 个页面：**总览 / 底仓 / 定投 / 自选 / 设置**。
+## 功能说明
 
-### 1. 总览（Dashboard）
-- 汇总底仓总额、日定投额、月定投额（日 × 22 个交易日）、月薪占比。
-- 月薪占比超出设定上限时高亮告警。
-- 「底仓占比」与「定投占比」环形饼图，配右侧品类图例。
-- **图表交互（v2 优化）**：
-  - 点击右侧图例中的任意品类，可**取消该项的统计**（被取消的品类不参与占比计算，剩余项重新归一化到 100%）。
-  - 再次点击该图例即可恢复统计；图例变为删除线 + 半透明表示已排除。
-  - 出现排除项时，图例底部显示「重置排除（恢复全部统计）」按钮，一键恢复。
-  - 饼图标题右侧实时显示「统计总额」与已排除项数量，确保口径清晰。
-- 「保存今日记录」生成当日快照，「查看历史对比」打开历史记录管理弹窗。
+### 总览
+一屏看清四个数字：底仓总额、日定投额、月定投额、月薪占比。下面是底仓和定投两张占比饼图。
 
-### 2. 底仓管理（Base）
-- 维护底仓资产（债券、黄金、股市宽基、主题基金、货币等动态品类）。
-- 支持多方案：新建 / 切换 / 删除底仓方案。
-- 资产增删改、按品类 Tab 筛选、名称搜索。
-- **图表交互（v2 优化）**：
-  - 右侧品类图例可点击，**切换整品类在饼图中的显示**（隐藏后该品类不参与统计）。
-  - 下方明细列表中的每一项可通过左侧小圆点**切换该项在饼图中的显示/隐藏**。
-  - 排除的明细项**仍保留在列表中**（呈半透明 + 删除线），可再次点击恢复，告别「排除后难以找回」。
-  - 顶部统计总额随排除项实时重算，并显示已排除品类数 / 单项数。
-- 历史快照：保存今日、查看历史记录、以历史为基准继续编辑。
+饼图右侧的品类图例可以点——点一下，这个品类就不参与统计了，剩下的品类重新算占比；再点一下就恢复。明细里每一项也能单独点左侧小圆点切换，不想看某一项就点掉，想看回来再点一下，不会消失找不到。
 
-### 3. 每日定投（DCA）
-- 维护每日定投计划，自动计算月定投额与月薪占比。
-- 月定投超出月薪上限时在预算卡上标红告警，并附带进度条可视化。
-- 多方案管理、品类 Tab 筛选、搜索。
-- **图表交互与底仓页一致**：右侧图例点击切换品类，明细项点击切换显隐且可恢复。
+### 底仓
+管理手上的持仓。可以按品类分 Tab 看，也能按名字搜索。支持多套方案，比如「主仓位」「实验仓位」分开记。
 
-### 4. 自选管理（Watchlist）
-- 预先维护关注的基金 / 股票（代码、名称、品类、备注）。
-- 在底仓 / 定投页「添加」时可直接从自选列表快速选择，免去重复输入。
-- 支持按代码或名称搜索、编辑、删除。
+「保存今日记录」会把当前持仓存成一张快照。下次打开可以看到和上次的差额，是加仓了还是市值变了，一目了然。
 
-### 5. 设置（Settings）
-- **工资约束**：月薪、定投比例上限（%）。
-- **品类管理**：新增 / 编辑 / 删除自定义品类（含颜色），内置品类不可删除。被资产或自选引用的品类禁止删除。
-- **数据管理**：
-  - 历史记录入口；
-  - 导出 JSON 备份；
-  - 导入 JSON 恢复；
-  - 清空所有数据（不可恢复）。
-- **云同步**（可选）：基于 Supabase + Magic Link 免密码登录，支持从云端同步、上传本地数据到云端。未配置时纯本地存储。
+### 定投
+记录每天定投多少钱。自动算出月定投额（按 22 个交易日），对照你设的月薪和比例上限，超了会标红提醒。
 
----
+饼图和明细的交互跟底仓一样：图例点掉就排除，明细小圆点切换显隐，随时恢复。
 
-## 关于「再平衡」模块
+### 自选
+把关注的基金、股票先存起来，下次在底仓或定投页添加时直接选，不用反复输入代码和名字。
 
-旧版本包含独立的「再平衡模拟」页面（设定涨幅后给出调仓建议）。本次迭代已将其移除——**该能力由「历史快照」自然承载**：
+### 设置
+- 工资约束：月薪、定投比例上限。
+- 品类管理：自定义品类和颜色。内置品类不能删，自己加的可以。
+- 数据管理：导出 JSON 备份、导入恢复、清空所有数据。
 
-- 在底仓 / 定投 / 总览页随时「保存今日记录」生成快照；
-- 在历史记录中选中两条快照可「对比」，查看各品类 / 明细的金额与比例变化趋势；
-- 可「以此为基准编辑」将某条历史快照恢复到当前继续调整。
+## 关于数据安全
 
-这样用真实的历史数据做对比，比假设涨幅的模拟更贴近实际，也减少了冗余功能。
+所有数据只保存在你浏览器的 localStorage 里，不会上传到任何服务器。关闭浏览器、断网都能正常用。想换设备就导出一份 JSON 带走。
 
----
+（代码里留了 Supabase 云同步的接口，默认不启用，不配置 `.env` 就是纯本地。）
 
-## 图表交互说明（重点）
+## 关于再平衡
 
-本项目使用 [Recharts](https://recharts.org/) 渲染环形饼图，所有饼图均支持两层粒度的显隐切换：
+旧版有个独立的「再平衡」页面，需要假设涨幅才能给调仓建议。这次去掉了——假设涨幅不如看真实历史。用「保存快照」记录每次持仓，需要对比时选两条快照看变化，比模拟更靠谱。
 
-| 操作位置 | 控制粒度 | 行为 |
-| --- | --- | --- |
-| 饼图右侧「品类图例」 | 品类 | 点击切换该品类的统计；隐藏后不参与占比计算，剩余品类重新归一化到 100% |
-| 下方「明细列表」每行左侧小圆点 | 单项 | 点击切换该单项的统计；排除后仍保留在列表中（半透明），可再次点击恢复 |
+## 本地运行
 
-- 任何排除操作都会让饼图与「统计总额」实时重算。
-- 出现任意排除项时，图例底部与搜索栏右侧都会出现「重置排除」入口，一键恢复全部统计。
-- 排除状态仅影响图表统计展示，不会删除或修改底仓 / 定投的真实数据。
+需要 Node.js 20 以上，推荐用 [Bun](https://bun.sh/)。
 
----
-
-## 技术栈
-
-- **框架**：React 18 + TypeScript + Vite 6
-- **路由**：react-router-dom v6（HashRouter，适配 GitHub Pages 静态部署）
-- **状态管理**：Zustand
-- **图表**：Recharts
-- **样式**：Tailwind CSS
-- **图标**：lucide-react
-- **云服务**：Supabase（可选：数据同步 + Magic Link 登录）
-- **截图**：html2canvas（生成资产小票图片）
-- **包管理 / 运行时**：推荐 [Bun](https://bun.sh/)，也兼容 npm
-
----
-
-## 快速开始
-
-### 环境要求
-- Node.js ≥ 20（推荐 22）或 Bun ≥ 1.1
-
-### 安装依赖
 ```bash
-bun install
-# 或
+bun install      # 装依赖
+bun run dev      # 开发
+bun run build    # 打包，产物在 dist/
+```
+
+用 npm 也行：
+
+```bash
 npm install
-```
-
-### 本地开发
-```bash
-bun run dev
-# 或
 npm run dev
-```
-默认启动在 `http://localhost:5173/asset-planner/`（若端口被占用会自动递增）。
-
-### 生产构建
-```bash
-bun run build
-# 或
 npm run build
 ```
-构建产物输出到 `dist/`，类型检查 + Vite 打包一步完成。
-
-### 预览构建产物
-```bash
-bun run preview
-```
-
-### （可选）开启云同步
-复制 `.env.example` 为 `.env`，填入 Supabase 项目 URL 与 anon key：
-```
-VITE_SUPABASE_URL=https://your-project-id.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key-here
-```
-不配置时所有数据保存在浏览器 localStorage，完全可用。
-
----
 
 ## 部署到 GitHub Pages
 
-仓库已自带 `.github/workflows/deploy.yml`：当推送到 `main` / `master` 分支时会自动构建并部署到 GitHub Pages。
+推送到 main 分支会自动部署。部署前在仓库 **Settings → Pages → Build and deployment → Source** 选 `GitHub Actions`。部署后访问 `https://<你的用户名>.github.io/asset-planner/`。
 
-部署步骤：
-1. 在 GitHub 仓库 **Settings → Pages → Build and deployment → Source** 选择 `GitHub Actions`。
-2. （可选）在 **Settings → Secrets and variables → Actions** 添加 `VITE_SUPABASE_URL` 与 `VITE_SUPABASE_ANON_KEY` 以启用云同步。
-3. 推送代码到 `main` 分支，Action 完成后即可通过 `https://<你的用户名>.github.io/asset-planner/` 访问。
+## 技术栈
 
-> 注意：`vite.config.ts` 中 `base: '/asset-planner/'` 已与仓库名对齐，部署到其它仓库名时需同步修改。
-
----
-
-## 项目结构
-
-```
-src/
-├── App.tsx                      # 路由 + 布局入口
-├── main.tsx                     # React 挂载
-├── index.css                    # Tailwind 全局样式
-├── pages/                       # 5 个页面
-│   ├── DashboardPage.tsx        # 总览
-│   ├── BasePage.tsx             # 底仓管理
-│   ├── DCAPage.tsx              # 每日定投
-│   ├── WatchlistPage.tsx        # 自选管理
-│   └── SettingsPage.tsx         # 设置
-├── components/
-│   ├── charts/CustomPieTooltip.tsx
-│   ├── layout/TabBar.tsx        # 底部导航
-│   ├── snapshot/                # 快照相关组件
-│   │   ├── ReceiptCard.tsx
-│   │   ├── ReceiptPreviewModal.tsx
-│   │   ├── SnapshotManageModal.tsx
-│   │   └── SnapshotCompareModal.tsx
-│   ├── ui/                      # 通用 UI（Modal、Common、品类管理）
-│   └── watchlist/WatchlistPickerModal.tsx
-├── stores/                      # Zustand stores
-│   ├── portfolioStore.ts        # 底仓 / 定投 / 快照 / 同步
-│   ├── settingsStore.ts         # 工资约束 / 品类 / 自选
-│   └── authStore.ts             # Supabase 认证
-├── hooks/useCategories.ts       # 品类 label / color 查询 hook
-├── lib/
-│   ├── calculations.ts          # 金额 / 占比 / 工资约束计算
-│   └── supabase.ts              # Supabase 客户端封装
-└── types/index.ts               # TypeScript 类型定义
-```
-
-### 语义化 DOM ID
-为便于定位与自动化测试，关键 DOM 节点均带语义化 ID，命名规则为「页面-区块」或「页面-区块-标识」，例如：
-- `dashboard-page`、`dashboard-base-chart`、`dashboard-base-legend`、`dashboard-base-legend-{categoryId}`
-- `base-page`、`base-chart-card`、`base-pie`、`base-legend`、`base-legend-{categoryId}`、`base-asset-list`、`base-asset-{assetId}`
-- `dca-page`、`dca-chart-card`、`dca-pie`、`dca-legend`、`dca-asset-{assetId}`
-
----
-
-## 数据与隐私
-
-- 默认纯本地存储（localStorage），无需注册即可使用。
-- 配置 Supabase 后，数据可上传到你的私有 Supabase 项目，仅你自己登录后可见。
-- 提供 JSON 导出 / 导入，便于本地备份与迁移。
-
----
-
-## 许可
-
-本项目仅供个人学习与使用。
+React 18 + TypeScript + Vite + Zustand + Recharts + Tailwind CSS。
