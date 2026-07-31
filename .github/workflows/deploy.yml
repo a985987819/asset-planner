@@ -42,7 +42,10 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Setup Pages
-        uses: actions/configure-pages@v4
+        uses: actions/configure-pages@v5
+        with:
+          # 自动为仓库启用 GitHub Pages 并配置为 Actions 构建源
+          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
