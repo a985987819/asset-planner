@@ -72,6 +72,10 @@ export function applyDocument(doc: CloudDocument): boolean {
         : settingsStore.categories,
       watchlist: Array.isArray(s.watchlist) ? s.watchlist : settingsStore.watchlist,
     });
+    // 解除指向不存在自选条目的悬空链接
+    usePortfolioStore.getState().reconcileWatchlistLinks(
+      Array.isArray(s.watchlist) ? s.watchlist.map((w) => w.id) : []
+    );
   }
 
   usePortfolioStore.getState().persistLocal();

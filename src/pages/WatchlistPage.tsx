@@ -2,7 +2,7 @@
 // 自选基金列表页
 // ============================================================
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Plus, Pencil, Trash2, Search, Star, Upload } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useCategories } from '@/hooks/useCategories';
@@ -31,11 +31,51 @@ export default function WatchlistPage() {
   const { categories, getLabel, getColor } = useCategories();
 
   const [search, setSearch] = useState('');
+  const [activeCategory, setActiveCategory] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<WatchlistForm>(emptyForm);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 品类 Tab（全部 + 有条目的品类，按品类管理顺序）
+  const categoryTabs = useMemo(() => {
+    const usedIds = new Set(watchlist.map((w) => w.categoryId));
+    return [
+      { id: 'all', label: '全部', color: '', count: watchlist.length },
+      ...categories
+        .filter((c) => usedIds.has(c.id))
+        .map((c) => ({
+          id: c.id,
+          label: c.name,
+          color: c.color,
+          count: watchlist.filter((w) => w.categoryId === c.id).length,
+        })),
+    ];
+  }, [watchlist, categories]);
+
+  // 筛选 + 排序：先按品类 sortOrder，再按名称
+  const filtered = useMemo(() => {
+    let list = search.trim()
+      ? watchlist.filter(
+          (w) =>
+            w.name.toLowerCase().includes(search.toLowerCase()) ||
+            w.code.toLowerCase().includes(search.toLowerCase())
+        )
+      : watchlist;
+
+    if (activeCategory !== 'all') {
+      list = list.filter((w) => w.categoryId === activeCategory);
+    }
+
+    const catOrder = new Map(categories.map((c) => [c.id, c.sortOrder]));
+    return [...list].sort((a, b) => {
+      const oa = catOrder.get(a.categoryId) ?? 999;
+      const ob = catOrder.get(b.categoryId) ?? 999;
+      if (oa !== ob) return oa - ob;
+      return a.name.localeCompare(b.name, 'zh-CN');
+    });
+  }, [watchlist, search, activeCategory, categories]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -56,15 +96,6 @@ export default function WatchlistPage() {
       setImporting(false);
     }
   };
-
-  // 筛选
-  const filtered = search.trim()
-    ? watchlist.filter(
-        (w) =>
-          w.name.toLowerCase().includes(search.toLowerCase()) ||
-          w.code.toLowerCase().includes(search.toLowerCase())
-      )
-    : watchlist;
 
   const openAdd = () => {
     setEditingId(null);
@@ -147,6 +178,32 @@ export default function WatchlistPage() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="搜索代码或名称..."
           />
+        </div>
+      )}
+
+      {/* 品类 Tab */}
+      {watchlist.length > 0 && (
+        <div className="mb-3 flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none">
+          {categoryTabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveCategory(tab.id)}
+              className={`flex-shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                activeCategory === tab.id
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {tab.id !== 'all' && (
+                <span
+                  className="mr-1 inline-block h-2 w-2 rounded-full align-middle"
+                  style={{ backgroundColor: tab.color }}
+                />
+              )}
+              {tab.label}
+              <span className="ml-1 text-[10px] opacity-70">{tab.count}</span>
+            </button>
+          ))}
         </div>
       )}
 

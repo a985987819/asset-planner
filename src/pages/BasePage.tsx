@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Plus, Pencil, Trash2, FolderOpen, Camera, Search, X, RotateCcw } from 'lucide-react';
+import { Plus, Pencil, Trash2, FolderOpen, Camera, Search, X, RotateCcw, Link } from 'lucide-react';
 import { usePortfolioStore } from '@/stores/portfolioStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { calcBaseTotal, formatMoney, formatPercent } from '@/lib/calculations';
 import { useCategories } from '@/hooks/useCategories';
 import type { WatchlistItem, Snapshot } from '@/types';
@@ -16,9 +17,11 @@ interface AssetFormData {
   category: string;
   name: string;
   amount: string;
+  code: string;
+  watchlistId: string;
 }
 
-const emptyForm: AssetFormData = { category: '', name: '', amount: '' };
+const emptyForm: AssetFormData = { category: '', name: '', amount: '', code: '', watchlistId: '' };
 
 function getSnapshotBaseTotal(snapshot: Snapshot) {
   return calcBaseTotal(snapshot.snapshotData.basePortfolio.assets ?? []);
@@ -60,6 +63,7 @@ export default function BasePage() {
   } = usePortfolioStore();
 
   const { categories, getLabel, getColor } = useCategories();
+  const watchlist = useSettingsStore((s) => s.watchlist);
 
   const portfolio = getActiveBase();
   const assets = portfolio?.assets ?? [];
@@ -131,12 +135,18 @@ export default function BasePage() {
 
   const openEdit = (asset: (typeof assets)[0]) => {
     setEditingId(asset.id);
-    setForm({ category: asset.category, name: asset.name, amount: String(asset.amount) });
+    setForm({
+      category: asset.category,
+      name: asset.name,
+      amount: String(asset.amount),
+      code: asset.code ?? '',
+      watchlistId: asset.watchlistId ?? '',
+    });
     setFormModalOpen(true);
   };
 
   const handleQuickAdd = (item: WatchlistItem, amount: number) => {
-    addBaseAsset(item.categoryId, item.name, amount);
+    addBaseAsset(item.categoryId, item.name, amount, { watchlistId: item.id, code: item.code });
     setPickerOpen(false);
   };
 
@@ -146,15 +156,42 @@ export default function BasePage() {
     setFormModalOpen(true);
   };
 
+  // 选中自选条目 → 回填品类/名称/代码；选"不关联" → 仅清除链接
+  const handleWatchlistSelect = (watchlistId: string) => {
+    if (!watchlistId) {
+      setForm((f) => ({ ...f, watchlistId: '' }));
+      return;
+    }
+    const item = watchlist.find((w) => w.id === watchlistId);
+    if (item) {
+      setForm({
+        ...form,
+        watchlistId: item.id,
+        category: item.categoryId,
+        name: item.name,
+        code: item.code,
+      });
+    }
+  };
+
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseFloat(form.amount);
     if (!form.name.trim() || Number.isNaN(amount) || amount <= 0) return;
 
+    const common = {
+      category: form.category,
+      name: form.name.trim(),
+      code: form.code.trim(),
+      watchlistId: form.watchlistId || undefined,
+    };
     if (editingId) {
-      updateBaseAsset(editingId, { category: form.category, name: form.name.trim(), amount });
+      updateBaseAsset(editingId, { ...common, amount });
     } else {
-      addBaseAsset(form.category, form.name.trim(), amount);
+      addBaseAsset(common.category, common.name, amount, {
+        watchlistId: common.watchlistId,
+        code: common.code,
+      });
     }
     setFormModalOpen(false);
   };
@@ -421,10 +458,14 @@ export default function BasePage() {
                       title={isExcluded ? '重新计入统计' : '从统计中排除此项'}
                     />
                     <div className="min-w-0 flex-1">
-                      <div className={`truncate text-sm font-medium text-gray-900 ${isCategoryHidden && !isExcluded ? 'line-through' : ''}`}>
-                        {asset.name}
+                      <div className={`flex items-center gap-1 text-sm font-medium text-gray-900 ${isCategoryHidden && !isExcluded ? 'line-through' : ''}`}>
+                        {asset.watchlistId && <Link size={12} className="flex-shrink-0 text-gray-400" />}
+                        <span className="truncate">{asset.name}</span>
                       </div>
-                      <div className="text-xs text-gray-400">{getLabel(asset.category)}</div>
+                      <div className="flex items-center gap-2 text-xs text-gray-400">
+                        {asset.code && <span className="font-mono">{asset.code}</span>}
+                        <span>{getLabel(asset.category)}</span>
+                      </div>
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-semibold text-gray-900">{formatMoney(asset.amount)}</div>
@@ -464,6 +505,23 @@ export default function BasePage() {
       <Modal open={formModalOpen} onClose={() => setFormModalOpen(false)} title={editingId ? '编辑资产' : '添加资产'}>
         <form onSubmit={handleFormSubmit} className="space-y-4">
           <div>
+            <label className="label">关联自选（选填）</label>
+            <select
+              className="select"
+              value={form.watchlistId}
+              onChange={(e) => handleWatchlistSelect(e.target.value)}
+            >
+              <option value="">不关联</option>
+              {watchlist.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                  {w.code ? ` (${w.code})` : ''}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-400">关联后名称/品类/代码与自选条目双向同步</p>
+          </div>
+          <div className="mt-3">
             <label className="label">品类</label>
             <select
               className="select"
@@ -486,6 +544,15 @@ export default function BasePage() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="如：沪深300ETF、黄金ETF"
               required
+            />
+          </div>
+          <div className="mt-3">
+            <label className="label">代码（选填）</label>
+            <input
+              className="input"
+              value={form.code}
+              onChange={(e) => setForm({ ...form, code: e.target.value })}
+              placeholder="如 510300, 000001"
             />
           </div>
           <div className="mt-3">

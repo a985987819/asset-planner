@@ -12,11 +12,14 @@ export interface CategoryDefinition {
 }
 
 export const DEFAULT_CATEGORIES: CategoryDefinition[] = [
-  { id: 'bond',  name: '债券',     color: '#3b82f6', isBuiltin: true, sortOrder: 0 },
-  { id: 'gold',  name: '黄金',     color: '#f59e0b', isBuiltin: true, sortOrder: 1 },
-  { id: 'broad', name: '股市宽基', color: '#22c55e', isBuiltin: true, sortOrder: 2 },
-  { id: 'theme', name: '主题基金', color: '#8b5cf6', isBuiltin: true, sortOrder: 3 },
-  { id: 'money', name: '货币',     color: '#6b7280', isBuiltin: true, sortOrder: 4 },
+  { id: 'bond',   name: '债券',     color: '#3b82f6', isBuiltin: true, sortOrder: 0 },
+  { id: 'gold',   name: '黄金',     color: '#f59e0b', isBuiltin: true, sortOrder: 1 },
+  { id: 'broad',  name: '股市宽基', color: '#22c55e', isBuiltin: true, sortOrder: 2 },
+  { id: 'theme',  name: '主题基金', color: '#8b5cf6', isBuiltin: true, sortOrder: 3 },
+  { id: 'money',  name: '货币',     color: '#6b7280', isBuiltin: true, sortOrder: 4 },
+  { id: 'qdii',   name: 'QDII',     color: '#06b6d4', isBuiltin: true, sortOrder: 5 },
+  { id: 'stock',  name: '股票',     color: '#ef4444', isBuiltin: true, sortOrder: 6 },
+  { id: 'lowvol', name: '低波基金', color: '#84cc16', isBuiltin: true, sortOrder: 7 },
 ];
 
 export const CATEGORY_PRESET_COLORS = [
@@ -30,10 +33,12 @@ export type AssetCategory = 'bond' | 'gold' | 'broad' | 'theme' | 'money';
 // @deprecated 使用 useCategories().labels
 export const CATEGORY_LABELS: Record<string, string> = {
   bond: '债券', gold: '黄金', broad: '股市宽基', theme: '主题基金', money: '货币',
+  qdii: 'QDII', stock: '股票', lowvol: '低波基金',
 };
 // @deprecated 使用 useCategories().colors
 export const CATEGORY_COLORS: Record<string, string> = {
   bond: '#3b82f6', gold: '#f59e0b', broad: '#22c55e', theme: '#8b5cf6', money: '#6b7280',
+  qdii: '#06b6d4', stock: '#ef4444', lowvol: '#84cc16',
 };
 
 // ---- 自选条目 ----
@@ -54,6 +59,8 @@ export interface Asset {
   name: string;
   amount: number;       // 底仓=总金额, 定投=日定投额
   sortOrder: number;
+  code?: string;        // 关联自选的代码（可选）
+  watchlistId?: string; // 关联的自选条目 ID（可选，双向同步）
 }
 
 // ---- 资产组合 ----

@@ -28,6 +28,22 @@ function saveToStorage(key: string, data: any) {
   }
 }
 
+// 资产侧名称/品类/代码变化 → 同步到关联自选条目
+// 用更新后的 watchlistId（支持改关联/新关联）；值未变或未关联则跳过
+function syncAssetToWatchlist(
+  prev: Asset | undefined,
+  updates: Partial<Pick<Asset, 'category' | 'name' | 'amount' | 'code' | 'watchlistId'>>
+) {
+  if (updates.name === undefined && updates.category === undefined && updates.code === undefined) return;
+  const newWatchlistId = updates.watchlistId !== undefined ? updates.watchlistId : prev?.watchlistId;
+  if (!newWatchlistId) return;
+  useSettingsStore.getState().propagateAssetChange(newWatchlistId, {
+    name: updates.name,
+    category: updates.category,
+    code: updates.code,
+  });
+}
+
 // ---- Store ----
 interface PortfolioStore {
   // 数据
@@ -45,14 +61,24 @@ interface PortfolioStore {
   getActiveDCA: () => Portfolio | null;
 
   // 底仓操作
-  addBaseAsset: (category: string, name: string, amount: number) => void;
-  updateBaseAsset: (assetId: string, updates: Partial<Pick<Asset, 'category' | 'name' | 'amount'>>) => void;
+  addBaseAsset: (category: string, name: string, amount: number, opts?: { watchlistId?: string; code?: string }) => void;
+  updateBaseAsset: (assetId: string, updates: Partial<Pick<Asset, 'category' | 'name' | 'amount' | 'code' | 'watchlistId'>>) => void;
   removeBaseAsset: (assetId: string) => void;
 
   // 定投操作
-  addDCAAsset: (category: string, name: string, amount: number) => void;
-  updateDCAAsset: (assetId: string, updates: Partial<Pick<Asset, 'category' | 'name' | 'amount'>>) => void;
+  addDCAAsset: (category: string, name: string, amount: number, opts?: { watchlistId?: string; code?: string }) => void;
+  updateDCAAsset: (assetId: string, updates: Partial<Pick<Asset, 'category' | 'name' | 'amount' | 'code' | 'watchlistId'>>) => void;
   removeDCAAsset: (assetId: string) => void;
+
+  // 自选条目变更 → 同步到所有关联资产（由 settingsStore 调用）
+  propagateWatchlistChange: (
+    watchlistId: string,
+    updates: { name?: string; category?: string; code?: string }
+  ) => void;
+  // 自选条目被删除 → 解除关联资产的链接
+  unlinkWatchlist: (watchlistId: string) => void;
+  // 恢复快照/导入后，解除指向不存在自选条目的悬空链接
+  reconcileWatchlistLinks: (watchlistIds: string[]) => void;
 
   // 方案操作
   createPortfolio: (name: string, type: PortfolioType) => string;
@@ -144,7 +170,8 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
     type: PortfolioType,
     category: string,
     name: string,
-    amount: number
+    amount: number,
+    opts?: { watchlistId?: string; code?: string }
   ) => {
     updatePortfolio(type, (p) => ({
       ...p,
@@ -156,6 +183,8 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
           name: name.trim() || category,
           amount,
           sortOrder: p.assets.length,
+          code: opts?.code,
+          watchlistId: opts?.watchlistId,
         },
       ],
     }));
@@ -180,16 +209,18 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
     },
 
     // ---- 底仓资产 CRUD ----
-    addBaseAsset: (category, name, amount) =>
-      addAsset('base', category, name, amount),
+    addBaseAsset: (category, name, amount, opts) =>
+      addAsset('base', category, name, amount, opts),
 
     updateBaseAsset: (assetId, updates) => {
+      const prev = get().getActiveBase()?.assets.find((a) => a.id === assetId);
       updatePortfolio('base', (p) => ({
         ...p,
         assets: p.assets.map((a) =>
           a.id === assetId ? { ...a, ...updates } : a
         ),
       }));
+      syncAssetToWatchlist(prev, updates);
     },
 
     removeBaseAsset: (assetId) => {
@@ -200,16 +231,18 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
     },
 
     // ---- 定投资产 CRUD ----
-    addDCAAsset: (category, name, amount) =>
-      addAsset('dca', category, name, amount),
+    addDCAAsset: (category, name, amount, opts) =>
+      addAsset('dca', category, name, amount, opts),
 
     updateDCAAsset: (assetId, updates) => {
+      const prev = get().getActiveDCA()?.assets.find((a) => a.id === assetId);
       updatePortfolio('dca', (p) => ({
         ...p,
         assets: p.assets.map((a) =>
           a.id === assetId ? { ...a, ...updates } : a
         ),
       }));
+      syncAssetToWatchlist(prev, updates);
     },
 
     removeDCAAsset: (assetId) => {
@@ -217,6 +250,63 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
         ...p,
         assets: p.assets.filter((a) => a.id !== assetId),
       }));
+    },
+
+    // ---- 自选-资产联动 ----
+    propagateWatchlistChange: (watchlistId, updates) => {
+      const mapAssets = (list: Portfolio[]) =>
+        list.map((p) => ({
+          ...p,
+          assets: p.assets.map((a) => {
+            if (a.watchlistId !== watchlistId) return a;
+            const next = { ...a };
+            if (updates.name !== undefined && updates.name !== a.name) next.name = updates.name;
+            if (updates.category !== undefined && updates.category !== a.category) next.category = updates.category;
+            if (updates.code !== undefined && (updates.code ?? '') !== (a.code ?? '')) next.code = updates.code;
+            return next;
+          }),
+        }));
+
+      set((state) => ({
+        basePortfolios: mapAssets(state.basePortfolios),
+        dcaPortfolios: mapAssets(state.dcaPortfolios),
+      }));
+      persist();
+    },
+
+    unlinkWatchlist: (watchlistId) => {
+      const mapAssets = (list: Portfolio[]) =>
+        list.map((p) => ({
+          ...p,
+          assets: p.assets.map((a) =>
+            a.watchlistId === watchlistId ? { ...a, watchlistId: undefined } : a
+          ),
+        }));
+
+      set((state) => ({
+        basePortfolios: mapAssets(state.basePortfolios),
+        dcaPortfolios: mapAssets(state.dcaPortfolios),
+      }));
+      persist();
+    },
+
+    reconcileWatchlistLinks: (watchlistIds) => {
+      const valid = new Set(watchlistIds);
+      const mapAssets = (list: Portfolio[]) =>
+        list.map((p) => ({
+          ...p,
+          assets: p.assets.map((a) =>
+            a.watchlistId && !valid.has(a.watchlistId)
+              ? { ...a, watchlistId: undefined }
+              : a
+          ),
+        }));
+
+      set((state) => ({
+        basePortfolios: mapAssets(state.basePortfolios),
+        dcaPortfolios: mapAssets(state.dcaPortfolios),
+      }));
+      persist();
     },
 
     // ---- 方案操作 ----
@@ -347,12 +437,13 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
       // 恢复品类和自选
       if (settings.categories) {
         useSettingsStore.setState({ categories: settings.categories });
-        useSettingsStore.getState(); // trigger re-render
       }
       if (settings.watchlist) {
         useSettingsStore.setState({ watchlist: settings.watchlist });
-        useSettingsStore.getState();
       }
+      // 恢复的自选要落盘（修复既有 bug），并解除指向不存在自选条目的悬空链接
+      useSettingsStore.getState().persistLocal();
+      get().reconcileWatchlistLinks(settings.watchlist?.map((w) => w.id) ?? []);
 
       persist();
     },

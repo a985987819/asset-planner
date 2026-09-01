@@ -6,6 +6,9 @@ import { create } from 'zustand';
 import type { CategoryDefinition, UserSettings, WatchlistItem } from '@/types';
 import { DEFAULT_SETTINGS, DEFAULT_CATEGORIES } from '@/types';
 import { generateId } from '@/lib/calculations';
+// 注意：循环引用（portfolioStore 也 import 本模块）。只在 action 函数内延迟使用，
+// 绝不在模块顶层/初始化时调用，避免 TDZ。
+import { usePortfolioStore } from './portfolioStore';
 
 const STORAGE_KEY = 'asset-planner-settings';
 
@@ -14,11 +17,16 @@ function loadSettings(): UserSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      // 兼容 v1 数据：无 categories/watchlist 时种子默认值
+      const loadedCats: CategoryDefinition[] = parsed.categories?.length ? parsed.categories : [...DEFAULT_CATEGORIES];
+      // 迁移：补齐缺失的内置品类（新增 QDII/股票/低波基金），老数据自动获得
+      const builtinIds = new Set(loadedCats.filter((c) => c.isBuiltin).map((c) => c.id));
+      const missingBuiltins = DEFAULT_CATEGORIES.filter(
+        (c) => c.isBuiltin && !builtinIds.has(c.id)
+      );
       return {
         ...DEFAULT_SETTINGS,
         ...parsed,
-        categories: parsed.categories?.length ? parsed.categories : [...DEFAULT_CATEGORIES],
+        categories: [...loadedCats, ...missingBuiltins],
         watchlist: Array.isArray(parsed.watchlist) ? parsed.watchlist : [],
       };
     }
@@ -58,6 +66,12 @@ interface SettingsStore extends UserSettings {
   addWatchlistItems: (items: Array<Omit<WatchlistItem, 'id' | 'createdAt' | 'updatedAt'>>) => void;
   updateWatchlistItem: (id: string, updates: Partial<Pick<WatchlistItem, 'code' | 'name' | 'categoryId' | 'notes'>>) => void;
   deleteWatchlistItem: (id: string) => void;
+
+  // 资产侧改动 → 同步到自选条目（由 portfolioStore 调用）
+  propagateAssetChange: (
+    watchlistId: string,
+    updates: { name?: string; category?: string; code?: string }
+  ) => void;
 
   // 品类引用检查（被 portfolioStore 调用）
   isCategoryInUse: (id: string) => { inAssets: boolean; inWatchlist: boolean };
@@ -168,6 +182,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     },
 
     updateWatchlistItem: (id, updates) => {
+      const prev = get().watchlist.find((w) => w.id === id);
       set((s) => ({
         watchlist: s.watchlist.map((w) =>
           w.id === id
@@ -176,6 +191,17 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
         ),
       }));
       persist();
+
+      // 名称/品类/代码变化 → 同步到所有关联资产
+      if (prev) {
+        const changed: { name?: string; category?: string; code?: string } = {};
+        if (updates.name !== undefined && updates.name !== prev.name) changed.name = updates.name;
+        if (updates.categoryId !== undefined && updates.categoryId !== prev.categoryId) changed.category = updates.categoryId;
+        if (updates.code !== undefined && (updates.code ?? '') !== (prev.code ?? '')) changed.code = updates.code;
+        if (Object.keys(changed).length > 0) {
+          usePortfolioStore.getState().propagateWatchlistChange(id, changed);
+        }
+      }
     },
 
     deleteWatchlistItem: (id) => {
@@ -183,6 +209,38 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
         watchlist: s.watchlist.filter((w) => w.id !== id),
       }));
       persist();
+      // 解除关联资产的链接（保留其名称/品类/代码）
+      usePortfolioStore.getState().unlinkWatchlist(id);
+    },
+
+    // 资产侧改动 → 更新自选条目，并让所有关联资产收敛到自选最新值
+    propagateAssetChange: (watchlistId, updates) => {
+      const item = get().watchlist.find((w) => w.id === watchlistId);
+      if (!item) return;
+
+      const next: Partial<WatchlistItem> = {};
+      if (updates.name !== undefined && updates.name !== item.name) next.name = updates.name;
+      if (updates.category !== undefined && updates.category !== item.categoryId) next.categoryId = updates.category;
+      if (updates.code !== undefined && (updates.code ?? '') !== (item.code ?? '')) next.code = updates.code;
+
+      if (Object.keys(next).length > 0) {
+        set((s) => ({
+          watchlist: s.watchlist.map((w) =>
+            w.id === watchlistId
+              ? { ...w, ...next, updatedAt: new Date().toISOString() }
+              : w
+          ),
+        }));
+        persist();
+      }
+
+      // 以自选条目为规范源，收敛所有关联资产（含触发改动的那个，值已一致则跳过）
+      const canonical = { ...item, ...next };
+      usePortfolioStore.getState().propagateWatchlistChange(watchlistId, {
+        name: canonical.name,
+        category: canonical.categoryId,
+        code: canonical.code,
+      });
     },
 
     // ---- 引用检查 ----
