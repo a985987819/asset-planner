@@ -5,11 +5,12 @@
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
 import type { CloudDocument } from '@/lib/dataDocument';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// trim 防止 GitHub Secret 粘贴时带入的尾部换行/空格导致认证失败
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
 // 完全免登录模式下所有设备共用的固定用户 ID
-export const SYNC_USER_ID = import.meta.env.VITE_SYNC_USER_ID || '';
+export const SYNC_USER_ID = (import.meta.env.VITE_SYNC_USER_ID || '').trim();
 
 // 检查是否配置了 Supabase
 export const isSupabaseConfigured = (): boolean => {
