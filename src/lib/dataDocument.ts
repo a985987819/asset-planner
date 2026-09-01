@@ -5,6 +5,7 @@
 import type { Portfolio, Snapshot, UserSettings } from '@/types';
 import { usePortfolioStore } from '@/stores/portfolioStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { mergeDuplicateCategories } from '@/lib/categoryMerge';
 
 export interface CloudDocument {
   version: number;
@@ -80,6 +81,9 @@ export function applyDocument(doc: CloudDocument): boolean {
 
   usePortfolioStore.getState().persistLocal();
   useSettingsStore.getState().persistLocal();
+
+  // 归并自建品类与内置品类同名的脏数据（幂等）
+  mergeDuplicateCategories();
 
   return true;
 }

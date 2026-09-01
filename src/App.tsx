@@ -5,6 +5,7 @@
 import { useEffect } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { initSync } from '@/lib/sync';
+import { mergeDuplicateCategories } from '@/lib/categoryMerge';
 import TabBar from '@/components/layout/TabBar';
 import DashboardPage from '@/pages/DashboardPage';
 import BasePage from '@/pages/BasePage';
@@ -30,7 +31,11 @@ function AppContent() {
 }
 
 export default function App() {
-  useEffect(() => initSync(), []);
+  useEffect(() => {
+    // 先归并品类脏数据，再订阅同步，合并结果随首次 push 上传
+    mergeDuplicateCategories();
+    return initSync();
+  }, []);
 
   return (
     <HashRouter>

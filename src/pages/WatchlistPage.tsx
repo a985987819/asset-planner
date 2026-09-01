@@ -3,10 +3,11 @@
 // ============================================================
 
 import { useMemo, useRef, useState } from 'react';
-import { Plus, Pencil, Trash2, Search, Star, Upload } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Star, Upload, Download } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useCategories } from '@/hooks/useCategories';
 import { importWatchlistFromFile } from '@/lib/watchlistImport';
+import { exportWatchlistToFile } from '@/lib/watchlistExport';
 import type { WatchlistItem } from '@/types';
 import { PageHeader, EmptyState } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
@@ -36,6 +37,7 @@ export default function WatchlistPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<WatchlistForm>(emptyForm);
   const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 品类 Tab（全部 + 有条目的品类，按品类管理顺序）
@@ -94,6 +96,18 @@ export default function WatchlistPage() {
       alert('导入失败：请使用 .xlsx 文件（表头：代码、名称、品类、备注）');
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (watchlist.length === 0) return;
+    setExporting(true);
+    try {
+      await exportWatchlistToFile();
+    } catch {
+      alert('导出失败，请重试');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -159,6 +173,14 @@ export default function WatchlistPage() {
             <button onClick={() => fileInputRef.current?.click()} disabled={importing} className="btn-secondary text-sm">
               <Upload size={16} />
               导入
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={exporting || watchlist.length === 0}
+              className="btn-secondary text-sm"
+            >
+              <Download size={16} />
+              导出
             </button>
             <button onClick={openAdd} className="btn-primary text-sm">
               <Plus size={16} />

@@ -105,13 +105,19 @@ export default function DCAPage() {
     [assets, activeCategory]
   );
 
-  const searchedAssets = useMemo(
-    () =>
-      search.trim()
-        ? categoryAssets.filter((a) => a.name.toLowerCase().includes(search.toLowerCase().trim()))
-        : categoryAssets,
-    [categoryAssets, search]
-  );
+  // 明细排序：先按品类管理顺序归并，同品类内按添加时间（sortOrder）
+  const searchedAssets = useMemo(() => {
+    let list = search.trim()
+      ? categoryAssets.filter((a) => a.name.toLowerCase().includes(search.toLowerCase().trim()))
+      : categoryAssets;
+    const catOrder = new Map(categories.map((c) => [c.id, c.sortOrder]));
+    return [...list].sort((a, b) => {
+      const oa = catOrder.get(a.category) ?? 999;
+      const ob = catOrder.get(b.category) ?? 999;
+      if (oa !== ob) return oa - ob;
+      return a.sortOrder - b.sortOrder;
+    });
+  }, [categoryAssets, search, categories]);
 
   // 右侧图例：全量资产的品类聚合（包含所有品类，用于图例展示与点击切换）
   const ratiosAll = useMemo(() => aggregateRatios(assets), [assets]);
