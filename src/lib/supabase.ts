@@ -4,22 +4,20 @@
 
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
 import type { CloudDocument } from '@/lib/dataDocument';
+import { getSyncUserId, hasIdentity } from '@/lib/syncIdentity';
 
 // trim 防止 GitHub Secret 粘贴时带入的尾部换行/空格导致认证失败
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
 const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
-
-// 完全免登录模式下所有设备共用的固定用户 ID
-export const SYNC_USER_ID = (import.meta.env.VITE_SYNC_USER_ID || '').trim();
 
 // 检查是否配置了 Supabase
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(supabaseUrl && supabaseAnonKey);
 };
 
-// 云同步是否可启用：需 URL + anon key + 同步用户 ID 三者齐全
+// 云同步是否可启用：需 URL + anon key + 已设置 PIN 身份
 export const isSyncEnabled = (): boolean => {
-  return isSupabaseConfigured() && Boolean(SYNC_USER_ID);
+  return isSupabaseConfigured() && hasIdentity();
 };
 
 // 创建 Supabase 客户端（即使未配置也创建，调用时检查）
@@ -52,7 +50,7 @@ export async function fetchCloudDocument(): Promise<{
   const { data, error } = await supabase
     .from('user_data')
     .select('data, updated_at')
-    .eq('user_id', SYNC_USER_ID)
+    .eq('user_id', getSyncUserId())
     .maybeSingle<CloudRow>();
 
   if (error) throw error;
@@ -69,7 +67,7 @@ export async function saveCloudDocument(doc: CloudDocument): Promise<string> {
     .from('user_data')
     .upsert(
       {
-        user_id: SYNC_USER_ID,
+        user_id: getSyncUserId(),
         data: doc,
         updated_at: new Date().toISOString(),
       },
@@ -94,7 +92,7 @@ export function subscribeToCloudChanges(onRemoteChange: () => void): () => void 
         event: '*',
         schema: 'public',
         table: 'user_data',
-        filter: `user_id=eq.${SYNC_USER_ID}`,
+        filter: `user_id=eq.${getSyncUserId()}`,
       },
       () => onRemoteChange()
     )

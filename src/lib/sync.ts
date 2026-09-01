@@ -6,7 +6,7 @@ import { isSyncEnabled, fetchCloudDocument, saveCloudDocument, subscribeToCloudC
 import { buildDocument, applyDocument, documentFingerprint, type CloudDocument } from '@/lib/dataDocument';
 import { usePortfolioStore } from '@/stores/portfolioStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { DEFAULT_SETTINGS } from '@/types';
+import { DEFAULT_SETTINGS, type SyncStatus } from '@/types';
 
 // 记录本设备最后一次推送到云端的状态，用于回声识别与增量比较
 let lastPushedAt: string | null = null;
@@ -18,7 +18,7 @@ let repushPending = false;
 let pulling = false;
 let repullPending = false;
 
-function setStatus(status: 'syncing' | 'synced' | 'error' | 'offline') {
+function setStatus(status: SyncStatus) {
   const s = usePortfolioStore.getState();
   if (s.syncStatus !== status) s.setSyncStatus(status);
 }
@@ -162,16 +162,16 @@ export function schedulePull() {
   debouncedPull();
 }
 
-// 应用启动时初始化：订阅数据变更 + 实时通道 + 生命周期监听
-export function initSync(): () => void {
+let syncStarted = false;
+let cleanupSync: (() => void) | null = null;
+
+// 激活实时同步：Realtime 订阅 + 生命周期监听 + 首次拉取
+function startSync(): void {
+  if (syncStarted) return;
+  if (!isSyncEnabled()) return;
+  syncStarted = true;
+
   const unsubs: Array<() => void> = [];
-  unsubs.push(usePortfolioStore.subscribe(() => schedulePush()));
-  unsubs.push(useSettingsStore.subscribe(() => schedulePush()));
-
-  if (!isSyncEnabled()) {
-    return () => unsubs.forEach((u) => u());
-  }
-
   unsubs.push(subscribeToCloudChanges(() => schedulePull()));
 
   const onVisibility = () => {
@@ -186,9 +186,36 @@ export function initSync(): () => void {
   // 首次拉取（云端空会自动播种）
   schedulePull();
 
-  return () => {
+  cleanupSync = () => {
     window.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('online', onOnline);
     unsubs.forEach((u) => u());
+    syncStarted = false;
+    cleanupSync = null;
   };
+}
+
+// 应用启动时初始化：订阅数据变更 + 激活同步
+export function initSync(): () => void {
+  const unsubs: Array<() => void> = [];
+  unsubs.push(usePortfolioStore.subscribe(() => schedulePush()));
+  unsubs.push(useSettingsStore.subscribe(() => schedulePush()));
+  startSync();
+  return () => {
+    unsubs.forEach((u) => u());
+    cleanupSync?.();
+  };
+}
+
+// 设置身份后调用：激活实时同步
+export function activateSync(): void {
+  startSync();
+}
+
+// 清除身份后调用：停止同步并重置状态
+export function deactivateSync(): void {
+  cleanupSync?.();
+  lastPushedAt = null;
+  lastPushedFingerprint = '';
+  setStatus('idle');
 }

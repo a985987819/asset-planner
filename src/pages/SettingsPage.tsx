@@ -11,12 +11,14 @@ import {
   Pencil,
   Star,
   Plus,
+  KeyRound,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePortfolioStore } from '@/stores/portfolioStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { isSyncEnabled } from '@/lib/supabase';
-import { pullNow, pushNow } from '@/lib/sync';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import { pullNow, pushNow, activateSync, deactivateSync } from '@/lib/sync';
+import { hasIdentity, getSyncUserId, setSyncIdentity, clearSyncIdentity } from '@/lib/syncIdentity';
 import { buildDocument, importDocument } from '@/lib/dataDocument';
 import { useCategories } from '@/hooks/useCategories';
 import { PageHeader } from '@/components/ui/Common';
@@ -46,6 +48,9 @@ export default function SettingsPage() {
     color: string;
   } | null>(null);
   const [deleteError, setDeleteError] = useState('');
+  const [pin, setPin] = useState('');
+  const [editingIdentity, setEditingIdentity] = useState(false);
+  const [identityError, setIdentityError] = useState('');
 
   const checkCategoryInAssets = (categoryId: string): boolean => {
     const { basePortfolios, dcaPortfolios } = usePortfolioStore.getState();
@@ -104,7 +109,42 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSetIdentity = async () => {
+    setIdentityError('');
+    const value = pin.trim();
+    if (value.length < 4) {
+      setIdentityError('密码至少 4 位，建议用足够强的组合');
+      return;
+    }
+    try {
+      await setSyncIdentity(value);
+      setPin('');
+      setEditingIdentity(false);
+      // 切换身份时先停掉旧身份的实时订阅，再激活新身份
+      deactivateSync();
+      activateSync();
+    } catch {
+      setIdentityError('设置失败，请重试');
+    }
+  };
+
+  const handleClearIdentity = () => {
+    if (window.confirm('确定清除身份吗？清除后本设备将不再同步云端数据。')) {
+      clearSyncIdentity();
+      setPin('');
+      setEditingIdentity(false);
+      deactivateSync();
+    }
+  };
+
   const syncStatusDisplay = () => {
+    if (!hasIdentity()) {
+      return (
+        <span className="flex items-center gap-1 text-xs text-gray-400">
+          <KeyRound size={12} /> 未设置身份
+        </span>
+      );
+    }
     switch (syncStatus) {
       case 'syncing':
         return (
@@ -283,16 +323,73 @@ export default function SettingsPage() {
       </div>
 
       <div className="card mb-4">
+        <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+          <KeyRound size={15} />
+          身份校验
+        </h3>
+
+        {!hasIdentity() || editingIdentity ? (
+          <div className="space-y-3">
+            <p className="text-xs text-gray-400">
+              输入一个只有你知道的密码作为数据钥匙。不同密码对应不同的云端数据，互相隔离。请用足够强的密码，别告诉别人。
+            </p>
+            <input
+              type="password"
+              className="input"
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              placeholder="输入密码（至少 4 位）"
+            />
+            {identityError && <div className="text-xs text-red-500">{identityError}</div>}
+            <button onClick={handleSetIdentity} className="btn-primary w-full text-sm">
+              {hasIdentity() ? '切换身份' : '启用同步'}
+            </button>
+            {hasIdentity() && (
+              <button
+                onClick={() => {
+                  setEditingIdentity(false);
+                  setPin('');
+                  setIdentityError('');
+                }}
+                className="btn-ghost w-full text-xs"
+              >
+                取消
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+              <div>
+                <div className="text-sm font-medium text-gray-700">身份已设置</div>
+                <div className="text-xs text-gray-400 font-mono">指纹 {getSyncUserId().slice(0, 8)}</div>
+              </div>
+              <span className="flex items-center gap-1 text-xs text-green-600">
+                <Check size={12} /> 已启用
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setEditingIdentity(true)} className="btn-secondary flex-1 text-sm">
+                <Pencil size={14} /> 修改身份
+              </button>
+              <button onClick={handleClearIdentity} className="btn-secondary flex-1 text-sm !text-red-500 hover:!bg-red-50">
+                <Trash2 size={14} /> 清除身份
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="card mb-4">
         <h3 className="mb-3 text-sm font-medium text-gray-700">
           云同步 {syncStatusDisplay()}
         </h3>
 
-        {!isSyncEnabled() && (
+        {!isSupabaseConfigured() && (
           <div className="mb-3 rounded-lg bg-gray-50 p-2 text-xs text-gray-500">
             未配置云同步。在 <code className="text-primary-600">.env</code> 或 GitHub Secrets 配置
             <code className="text-primary-600"> VITE_SUPABASE_URL</code>、
-            <code className="text-primary-600"> VITE_SUPABASE_ANON_KEY</code>、
-            <code className="text-primary-600"> VITE_SYNC_USER_ID</code> 后自动启用，无需登录。
+            <code className="text-primary-600"> VITE_SUPABASE_ANON_KEY</code> 后自动启用，无需登录。
           </div>
         )}
 

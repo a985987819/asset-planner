@@ -39,22 +39,23 @@
 
 未配置云同步时，所有数据只保存在你浏览器的 localStorage 里，不会上传到任何服务器。关闭浏览器、断网都能正常用。想换设备就导出一份 JSON 带走。
 
-配置 Supabase 云同步后，数据会整份同步到你的 Supabase 项目（一张 `user_data` 表），PC / 手机之间自动同步。**本项目是完全免登录模式，云端数据不设鉴权，仅靠页面地址保密**——适合个人使用，请不要把链接发给别人。
+配置 Supabase 云同步后，数据会整份同步到你的 Supabase 项目（一张 `user_data` 表），PC / 手机之间自动同步。**身份靠你在设置页输入的密码（PIN）区分**：密码经 SHA-256 派生为云端 user_id，不同密码对应不同的云端数据，互相隔离。**这是"钥匙隔离"而非强鉴权**——云端数据本身不设鉴权，知道密码就等于能访问对应数据，所以请用足够强的密码、别告诉别人，也别把链接发给别人。
 
 ## 启用云同步（约 5 分钟，一次性）
 
 1. 注册并登录 [supabase.com](https://supabase.com)，创建一个免费项目
 2. 项目 → **SQL Editor**，粘贴 [db/schema.sql](db/schema.sql) 的全部内容并运行
 3. 项目 → **Settings → API**，复制 Project URL 与 anon key
-4. 生成同步用户 ID：浏览器控制台执行 `crypto.randomUUID()`
-5. 本地开发：在根目录创建 `.env`（参照 [.env.example](.env.example)），填入三个变量：
+4. 本地开发：在根目录创建 `.env`（参照 [.env.example](.env.example)），填入两个变量：
    - `VITE_SUPABASE_URL`（Project URL）
    - `VITE_SUPABASE_ANON_KEY`（anon key）
-   - `VITE_SYNC_USER_ID`（第 4 步生成的 UUID，所有设备必须一致）
-6. GitHub 仓库 → **Settings → Secrets and variables → Actions**，新增同名 secret：`VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY`、`VITE_SYNC_USER_ID`
-7. 推到 main 自动部署，手机与 PC 打开同一页面即可看到同一份数据
+5. GitHub 仓库 → **Settings → Secrets and variables → Actions**，新增同名 secret：`VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY`
+6. 推到 main 自动部署
+7. 打开页面 → **设置 → 身份校验**，输入一个只有你知道的密码并「启用同步」。同一密码的设备共享同一份数据，不同密码互相隔离
 
-启用后无需任何登录：任何修改自动上传，打开或切回页面时自动拉取，两台设备同时打开会实时同步。`.env` 不会被提交，密钥只放 GitHub Secrets。
+启用后无需登录：任何修改自动上传，打开或切回页面时自动拉取，两台设备同时打开会实时同步。`.env` 不会被提交，密钥只放 GitHub Secrets。
+
+> 注意：密码只存在本机浏览器里，**忘记密码后新设备将无法访问云端数据**（当前设备仍可继续使用）。切换身份时，本机数据会同步到新密码对应的云端行，旧密码的云端数据保留但不再同步。
 
 ## 关于再平衡
 
