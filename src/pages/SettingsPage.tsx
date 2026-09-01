@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Download,
   Upload,
@@ -6,8 +6,6 @@ import {
   Cloud,
   CloudOff,
   RefreshCw,
-  LogIn,
-  LogOut,
   History,
   Check,
   Pencil,
@@ -17,8 +15,9 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { usePortfolioStore } from '@/stores/portfolioStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { useAuthStore } from '@/stores/authStore';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { isSyncEnabled } from '@/lib/supabase';
+import { pullNow, pushNow } from '@/lib/sync';
+import { buildDocument, importDocument } from '@/lib/dataDocument';
 import { useCategories } from '@/hooks/useCategories';
 import { PageHeader } from '@/components/ui/Common';
 import { CategoryManageModal } from '@/components/ui/CategoryManageModal';
@@ -26,27 +25,18 @@ import { SnapshotManageModal } from '@/components/snapshot/SnapshotManageModal';
 
 export default function SettingsPage() {
   const settings = useSettingsStore();
-  const auth = useAuthStore();
   const navigate = useNavigate();
   const {
     syncStatus,
-    syncFromCloud,
-    syncToCloud,
-    exportAllData,
-    importAllData,
     clearAll,
     snapshots,
     removeSnapshot,
     restoreSnapshot,
-    setSyncStatus,
   } = usePortfolioStore();
 
   const { categories } = useCategories();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [email, setEmail] = useState('');
-  const [loginMessage, setLoginMessage] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
   const [exported, setExported] = useState(false);
   const [snapshotModalOpen, setSnapshotModalOpen] = useState(false);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
@@ -63,25 +53,8 @@ export default function SettingsPage() {
     return allAssets.some((asset) => asset.category === categoryId);
   };
 
-  useEffect(() => {
-    const handleOnline = () => {
-      setSyncStatus('idle');
-      if (auth.user) syncToCloud();
-    };
-    const handleOffline = () => setSyncStatus('offline');
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    if (!navigator.onLine) setSyncStatus('offline');
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, [auth.user, setSyncStatus, syncToCloud]);
-
   const handleExport = () => {
-    const json = exportAllData();
+    const json = JSON.stringify(buildDocument(), null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -104,21 +77,11 @@ export default function SettingsPage() {
     const reader = new FileReader();
     reader.onload = (loadEvent) => {
       const json = loadEvent.target?.result as string;
-      const success = importAllData(json);
+      const success = importDocument(json);
       alert(success ? '数据导入成功' : '导入失败：文件格式不正确');
     };
     reader.readAsText(file);
     event.target.value = '';
-  };
-
-  const handleLogin = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!email.trim()) return;
-    setLoginLoading(true);
-    const result = await auth.signIn(email.trim());
-    setLoginMessage(result.message);
-    setLoginLoading(false);
-    if (result.success) setEmail('');
   };
 
   const handleCategoryDelete = (categoryId: string) => {
@@ -324,61 +287,29 @@ export default function SettingsPage() {
           云同步 {syncStatusDisplay()}
         </h3>
 
-        {!isSupabaseConfigured() && (
+        {!isSyncEnabled() && (
           <div className="mb-3 rounded-lg bg-gray-50 p-2 text-xs text-gray-500">
-            未配置 Supabase。创建 <code className="text-primary-600">.env</code> 文件设置环境变量后即可启用云同步。
+            未配置云同步。在 <code className="text-primary-600">.env</code> 或 GitHub Secrets 配置
+            <code className="text-primary-600"> VITE_SUPABASE_URL</code>、
+            <code className="text-primary-600"> VITE_SUPABASE_ANON_KEY</code>、
+            <code className="text-primary-600"> VITE_SYNC_USER_ID</code> 后自动启用，无需登录。
           </div>
         )}
 
-        {auth.user ? (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between rounded-lg bg-green-50 p-3">
-              <div>
-                <div className="text-sm font-medium text-green-700">已登录</div>
-                <div className="text-xs text-green-600">{auth.user.email}</div>
-              </div>
-              <button onClick={() => auth.signOut()} className="btn-ghost text-xs text-red-500">
-                <LogOut size={14} /> 登出
-              </button>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => syncFromCloud()} disabled={syncStatus === 'syncing'} className="btn-primary flex-1 text-sm">
-                <RefreshCw size={16} className={syncStatus === 'syncing' ? 'animate-spin' : ''} />
-                {syncStatus === 'syncing' ? '同步中...' : '同步数据'}
-              </button>
-              <button onClick={() => syncToCloud()} disabled={syncStatus === 'syncing'} className="btn-secondary text-sm">
-                <Cloud size={16} /> 上传
-              </button>
-            </div>
-          </div>
-        ) : (
-          <form onSubmit={handleLogin} className="space-y-3">
-            <div>
-              <input
-                className="input"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="输入邮箱地址"
-                required
-              />
-            </div>
-            {loginMessage && (
-              <div
-                className={`rounded-lg p-2 text-xs ${
-                  loginMessage.includes('失败') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
-                }`}
-              >
-                {loginMessage}
-              </div>
-            )}
-            <button type="submit" disabled={loginLoading || !isSupabaseConfigured()} className="btn-primary w-full">
-              <LogIn size={16} />
-              {loginLoading ? '发送中...' : '发送登录链接'}
+        <div className="space-y-3">
+          <p className="text-xs text-gray-400">
+            数据自动同步：任何修改自动上传，打开或切回页面时自动拉取，多台设备实时同步。
+          </p>
+          <div className="flex gap-2">
+            <button onClick={() => pullNow()} disabled={syncStatus === 'syncing'} className="btn-primary flex-1 text-sm">
+              <RefreshCw size={16} className={syncStatus === 'syncing' ? 'animate-spin' : ''} />
+              {syncStatus === 'syncing' ? '同步中...' : '立即同步'}
             </button>
-            <p className="text-center text-xs text-gray-400">使用 Magic Link 免密码登录，验证链接将发送到你的邮箱。</p>
-          </form>
-        )}
+            <button onClick={() => pushNow()} disabled={syncStatus === 'syncing'} className="btn-secondary text-sm">
+              <Cloud size={16} /> 上传
+            </button>
+          </div>
+        </div>
       </div>
 
       <SnapshotManageModal

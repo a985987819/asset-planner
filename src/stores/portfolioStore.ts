@@ -5,16 +5,6 @@
 import { create } from 'zustand';
 import type { Asset, Portfolio, PortfolioType, Snapshot, SnapshotData, SyncStatus } from '@/types';
 import { generateId } from '@/lib/calculations';
-import {
-  fetchPortfolios,
-  upsertPortfolio,
-  deletePortfolio,
-  fetchSnapshots,
-  saveSnapshot,
-  deleteSnapshot,
-  isSupabaseConfigured,
-} from '@/lib/supabase';
-import { useAuthStore } from './authStore';
 import { useSettingsStore } from './settingsStore';
 
 const STORAGE_KEY_PORTFOLIOS = 'asset-planner-portfolios';
@@ -75,14 +65,12 @@ interface PortfolioStore {
   removeSnapshot: (id: string) => void;
   restoreSnapshot: (id: string) => void;
 
-  // 同步
-  syncFromCloud: () => Promise<void>;
-  syncToCloud: () => Promise<void>;
+  // 同步状态
   setSyncStatus: (status: SyncStatus) => void;
 
-  // 导入导出
-  exportAllData: () => string;
-  importAllData: (json: string) => boolean;
+  // 本地落盘（供外部应用数据后调用）
+  persistLocal: () => void;
+
   clearAll: () => void;
 }
 
@@ -289,8 +277,6 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
 
       if (!basePortfolio) return;
 
-      const userId = useAuthStore.getState().user?.id ?? null;
-
       const snapshotData: SnapshotData = {
         basePortfolio,
         dcaPortfolio: dcaPortfolio!,
@@ -305,7 +291,7 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
 
       const snapshot: Snapshot = {
         id: generateId(),
-        userId,
+        userId: null,
         label,
         snapshotData,
         createdAt: new Date().toISOString(),
@@ -313,11 +299,6 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
 
       set((s) => ({ snapshots: [snapshot, ...s.snapshots] }));
       persist();
-
-      // 同步到 Supabase
-      if (isSupabaseConfigured() && userId) {
-        saveSnapshot(snapshot).catch(() => {});
-      }
     },
 
     createDailySnapshot: () => {
@@ -335,9 +316,6 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
     removeSnapshot: (id) => {
       set((s) => ({ snapshots: s.snapshots.filter((sn) => sn.id !== id) }));
       persist();
-      if (isSupabaseConfigured()) {
-        deleteSnapshot(id).catch(() => {});
-      }
     },
 
     restoreSnapshot: (id) => {
@@ -379,122 +357,9 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
       persist();
     },
 
-    // ---- 同步 ----
-    syncFromCloud: async () => {
-      const userId = useAuthStore.getState().user?.id;
-      if (!userId || !isSupabaseConfigured()) return;
-
-      set({ syncStatus: 'syncing' });
-      try {
-        const cloudPortfolios = await fetchPortfolios(userId);
-        const cloudSnapshots = await fetchSnapshots(userId);
-
-        if (cloudPortfolios.length > 0) {
-          const base = cloudPortfolios.filter((p) => p.type === 'base');
-          const dca = cloudPortfolios.filter((p) => p.type === 'dca');
-
-          set({
-            basePortfolios: base.length > 0 ? base : get().basePortfolios,
-            dcaPortfolios: dca.length > 0 ? dca : get().dcaPortfolios,
-            snapshots: cloudSnapshots.length > 0 ? cloudSnapshots : get().snapshots,
-            syncStatus: 'synced',
-          });
-          persist();
-        } else {
-          // 云端无数据，把本地数据推到云端
-          await get().syncToCloud();
-          set({ syncStatus: 'synced' });
-        }
-      } catch (err) {
-        console.error('Sync from cloud failed:', err);
-        set({ syncStatus: 'error' });
-      }
-    },
-
-    syncToCloud: async () => {
-      const userId = useAuthStore.getState().user?.id;
-      if (!userId || !isSupabaseConfigured()) return;
-
-      set({ syncStatus: 'syncing' });
-      try {
-        const allPortfolios = [...get().basePortfolios, ...get().dcaPortfolios];
-        for (const p of allPortfolios) {
-          await upsertPortfolio({ ...p, userId });
-        }
-
-        for (const s of get().snapshots) {
-          await saveSnapshot({ ...s, userId });
-        }
-
-        set({ syncStatus: 'synced' });
-      } catch (err) {
-        console.error('Sync to cloud failed:', err);
-        set({ syncStatus: 'error' });
-      }
-    },
-
     setSyncStatus: (status) => set({ syncStatus: status }),
 
-    // ---- 导入导出 ----
-    exportAllData: () => {
-      const settings = useSettingsStore.getState();
-      const data = {
-        version: 2,
-        exportedAt: new Date().toISOString(),
-        portfolios: [...get().basePortfolios, ...get().dcaPortfolios],
-        snapshots: get().snapshots,
-        settings: {
-          monthlySalary: settings.monthlySalary,
-          dcaRatioLimit: settings.dcaRatioLimit,
-          currency: settings.currency,
-          categories: settings.categories,
-          watchlist: settings.watchlist,
-        },
-      };
-      return JSON.stringify(data, null, 2);
-    },
-
-    importAllData: (json: string) => {
-      try {
-        const data = JSON.parse(json);
-        if (!data.portfolios || !Array.isArray(data.portfolios)) {
-          return false;
-        }
-
-        const base = data.portfolios.filter((p: Portfolio) => p.type === 'base');
-        const dca = data.portfolios.filter((p: Portfolio) => p.type === 'dca');
-
-        set({
-          basePortfolios: base.length > 0 ? base : get().basePortfolios,
-          dcaPortfolios: dca.length > 0 ? dca : get().dcaPortfolios,
-          snapshots: data.snapshots || [],
-          activeBaseId: base[0]?.id ?? get().activeBaseId,
-          activeDCAId: dca[0]?.id ?? get().activeDCAId,
-        });
-
-        if (data.settings) {
-          const s = useSettingsStore.getState();
-          if (data.settings.monthlySalary !== undefined)
-            s.setMonthlySalary(data.settings.monthlySalary);
-          if (data.settings.dcaRatioLimit !== undefined)
-            s.setDCARatioLimit(data.settings.dcaRatioLimit);
-          // v2: 恢复 categories 和 watchlist
-          if (data.version >= 2 || data.settings.categories) {
-            useSettingsStore.setState({
-              categories: data.settings.categories?.length
-                ? data.settings.categories
-                : useSettingsStore.getState().categories,
-              watchlist: data.settings.watchlist ?? useSettingsStore.getState().watchlist,
-            });
-          }
-        }
-
-        persist();
-        return true;
-      } catch {
-        return false;
-      }
-    },
+    persistLocal: persist,
 
     clearAll: () => {
       const defaultBase: Portfolio = {

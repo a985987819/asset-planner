@@ -55,6 +55,7 @@ interface SettingsStore extends UserSettings {
 
   // 自选管理
   addWatchlistItem: (item: Omit<WatchlistItem, 'id' | 'createdAt' | 'updatedAt'>) => string;
+  addWatchlistItems: (items: Array<Omit<WatchlistItem, 'id' | 'createdAt' | 'updatedAt'>>) => void;
   updateWatchlistItem: (id: string, updates: Partial<Pick<WatchlistItem, 'code' | 'name' | 'categoryId' | 'notes'>>) => void;
   deleteWatchlistItem: (id: string) => void;
 
@@ -62,6 +63,9 @@ interface SettingsStore extends UserSettings {
   isCategoryInUse: (id: string) => { inAssets: boolean; inWatchlist: boolean };
 
   reset: () => void;
+
+  // 本地落盘（供外部应用数据后调用）
+  persistLocal: () => void;
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => {
@@ -149,6 +153,20 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       return newItem.id;
     },
 
+    // 批量导入（保持 Excel 顺序，一次落盘 + 同步）
+    addWatchlistItems: (items) => {
+      if (items.length === 0) return;
+      const now = new Date().toISOString();
+      const newItems: WatchlistItem[] = items.map((it) => ({
+        id: generateId(),
+        ...it,
+        createdAt: now,
+        updatedAt: now,
+      }));
+      set((s) => ({ watchlist: [...s.watchlist, ...newItems] }));
+      persist();
+    },
+
     updateWatchlistItem: (id, updates) => {
       set((s) => ({
         watchlist: s.watchlist.map((w) =>
@@ -182,5 +200,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       set({ ...DEFAULT_SETTINGS });
       try { localStorage.removeItem(STORAGE_KEY); } catch {}
     },
+
+    persistLocal: persist,
   };
 });

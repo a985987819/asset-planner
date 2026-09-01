@@ -25,7 +25,7 @@ export function useCategories() {
     return m;
   }, [cats]);
 
-  const getLabel = (id: string): string => labels[id] ?? id;
+  const getLabel = (id: string): string => labels[id] ?? '未分类';
   const getColor = (id: string): string => colors[id] ?? '#9ca3af';
 
   return {

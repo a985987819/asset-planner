@@ -2,10 +2,11 @@
 // 自选基金列表页
 // ============================================================
 
-import { useState } from 'react';
-import { Plus, Pencil, Trash2, Search, Star } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Plus, Pencil, Trash2, Search, Star, Upload } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useCategories } from '@/hooks/useCategories';
+import { importWatchlistFromFile } from '@/lib/watchlistImport';
 import type { WatchlistItem } from '@/types';
 import { PageHeader, EmptyState } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
@@ -33,6 +34,28 @@ export default function WatchlistPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<WatchlistForm>(emptyForm);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const r = await importWatchlistFromFile(file);
+      alert(
+        `导入完成：新增 ${r.added} 条` +
+          (r.skipped > 0 ? `，跳过重复 ${r.skipped} 条` : '') +
+          (r.missingCategory > 0 ? `，${r.missingCategory} 条品类未识别已归入默认品类` : '')
+      );
+    } catch {
+      alert('导入失败：请使用 .xlsx 文件（表头：代码、名称、品类、备注）');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   // 筛选
   const filtered = search.trim()
@@ -94,10 +117,23 @@ export default function WatchlistPage() {
         title="自选管理"
         subtitle="预先维护关注的基金/股票，添加资产时可直接选择"
         action={
-          <button onClick={openAdd} className="btn-primary text-sm">
-            <Plus size={16} />
-            添加
-          </button>
+          <div className="flex gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <button onClick={() => fileInputRef.current?.click()} disabled={importing} className="btn-secondary text-sm">
+              <Upload size={16} />
+              导入
+            </button>
+            <button onClick={openAdd} className="btn-primary text-sm">
+              <Plus size={16} />
+              添加
+            </button>
+          </div>
         }
       />
 

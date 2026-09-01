@@ -1,6 +1,6 @@
 # Asset Planner · 资产统计与定投工具
 
-一个用来记录和统计个人资产配置、复盘历史持仓、对照每日定投金额的小工具。所有数据只存在你自己的浏览器里，不上传任何服务器。
+一个用来记录和统计个人资产配置、复盘历史持仓、对照每日定投金额的小工具。数据默认保存在浏览器本地，可选配置 Supabase 实现多设备自动云同步，全程免登录。
 
 ## 这个工具解决什么问题
 
@@ -28,6 +28,8 @@
 ### 自选
 把关注的基金、股票先存起来，下次在底仓或定投页添加时直接选，不用反复输入代码和名字。
 
+支持 Excel（.xlsx）批量导入：「导入」→ 选择文件。表头列为 `代码 | 名称 | 品类 | 备注`（名称必填），品类列填品类名，留空或不识别会自动归入第一个品类；重复条目自动跳过。提示：代码在 Excel 里建议设成**文本**格式，避免前导零被吞。
+
 ### 设置
 - 工资约束：月薪、定投比例上限。
 - 品类管理：自定义品类和颜色。内置品类不能删，自己加的可以。
@@ -35,9 +37,24 @@
 
 ## 关于数据安全
 
-所有数据只保存在你浏览器的 localStorage 里，不会上传到任何服务器。关闭浏览器、断网都能正常用。想换设备就导出一份 JSON 带走。
+未配置云同步时，所有数据只保存在你浏览器的 localStorage 里，不会上传到任何服务器。关闭浏览器、断网都能正常用。想换设备就导出一份 JSON 带走。
 
-（代码里留了 Supabase 云同步的接口，默认不启用，不配置 `.env` 就是纯本地。）
+配置 Supabase 云同步后，数据会整份同步到你的 Supabase 项目（一张 `user_data` 表），PC / 手机之间自动同步。**本项目是完全免登录模式，云端数据不设鉴权，仅靠页面地址保密**——适合个人使用，请不要把链接发给别人。
+
+## 启用云同步（约 5 分钟，一次性）
+
+1. 注册并登录 [supabase.com](https://supabase.com)，创建一个免费项目
+2. 项目 → **SQL Editor**，粘贴 [db/schema.sql](db/schema.sql) 的全部内容并运行
+3. 项目 → **Settings → API**，复制 Project URL 与 anon key
+4. 生成同步用户 ID：浏览器控制台执行 `crypto.randomUUID()`
+5. 本地开发：在根目录创建 `.env`（参照 [.env.example](.env.example)），填入三个变量：
+   - `VITE_SUPABASE_URL`（Project URL）
+   - `VITE_SUPABASE_ANON_KEY`（anon key）
+   - `VITE_SYNC_USER_ID`（第 4 步生成的 UUID，所有设备必须一致）
+6. GitHub 仓库 → **Settings → Secrets and variables → Actions**，新增同名 secret：`VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY`、`VITE_SYNC_USER_ID`
+7. 推到 main 自动部署，手机与 PC 打开同一页面即可看到同一份数据
+
+启用后无需任何登录：任何修改自动上传，打开或切回页面时自动拉取，两台设备同时打开会实时同步。`.env` 不会被提交，密钥只放 GitHub Secrets。
 
 ## 关于再平衡
 
@@ -67,4 +84,4 @@ npm run build
 
 ## 技术栈
 
-React 18 + TypeScript + Vite + Zustand + Recharts + Tailwind CSS。
+React 18 + TypeScript + Vite + Zustand + Recharts + Tailwind CSS + Supabase（可选云同步）。

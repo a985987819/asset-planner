@@ -116,12 +116,5 @@ export const DEFAULT_SETTINGS: UserSettings = {
   watchlist: [],
 };
 
-// ---- 认证 ----
-export interface AuthState {
-  user: { id: string; email: string } | null;
-  session: any | null;
-  loading: boolean;
-}
-
 // ---- 同步状态 ----
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
