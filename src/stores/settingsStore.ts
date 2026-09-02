@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import type { CategoryDefinition, UserSettings, WatchlistItem } from '@/types';
 import { DEFAULT_SETTINGS, DEFAULT_CATEGORIES } from '@/types';
 import { generateId } from '@/lib/calculations';
+import { storageKey } from '@/lib/syncIdentity';
 // 注意：循环引用（portfolioStore 也 import 本模块）。只在 action 函数内延迟使用，
 // 绝不在模块顶层/初始化时调用，避免 TDZ。
 import { usePortfolioStore } from './portfolioStore';
@@ -14,7 +15,7 @@ const STORAGE_KEY = 'asset-planner-settings';
 
 function loadSettings(): UserSettings {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(STORAGE_KEY));
     if (raw) {
       const parsed = JSON.parse(raw);
       const loadedCats: CategoryDefinition[] = parsed.categories?.length ? parsed.categories : [...DEFAULT_CATEGORIES];
@@ -46,7 +47,7 @@ function saveSettings(s: SettingsStore) {
       categories: s.categories,
       watchlist: s.watchlist,
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(storageKey(STORAGE_KEY), JSON.stringify(data));
   } catch {
     // ignore
   }
@@ -77,6 +78,9 @@ interface SettingsStore extends UserSettings {
   isCategoryInUse: (id: string) => { inAssets: boolean; inWatchlist: boolean };
 
   reset: () => void;
+
+  // 按当前命名空间重载（身份切换/迁移后用）
+  reloadFromStorage: () => void;
 
   // 本地落盘（供外部应用数据后调用）
   persistLocal: () => void;
@@ -256,7 +260,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
 
     reset: () => {
       set({ ...DEFAULT_SETTINGS });
-      try { localStorage.removeItem(STORAGE_KEY); } catch {}
+      try { localStorage.removeItem(storageKey(STORAGE_KEY)); } catch {}
+    },
+
+    reloadFromStorage: () => {
+      set({ ...loadSettings() });
     },
 
     persistLocal: persist,

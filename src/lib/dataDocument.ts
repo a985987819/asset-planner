@@ -3,6 +3,7 @@
 // ============================================================
 
 import type { Portfolio, Snapshot, UserSettings } from '@/types';
+import { DEFAULT_SETTINGS } from '@/types';
 import { usePortfolioStore } from '@/stores/portfolioStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { mergeDuplicateCategories } from '@/lib/categoryMerge';
@@ -13,6 +14,21 @@ export interface CloudDocument {
   portfolios: Portfolio[];
   snapshots: Snapshot[];
   settings: UserSettings;
+}
+
+// 全新设备 / 全新用户的判空（云端播种/迁移守卫共用）
+export function isPristine(doc: CloudDocument | null | undefined): boolean {
+  if (!doc) return true;
+  const s = doc.settings || ({} as CloudDocument['settings']);
+  return (
+    doc.portfolios.every((p) => p.assets.length === 0) &&
+    doc.snapshots.length === 0 &&
+    (s.watchlist || []).length === 0 &&
+    (s.categories || []).every((c) => c.isBuiltin) &&
+    !s.monthlySalary &&
+    s.dcaRatioLimit === DEFAULT_SETTINGS.dcaRatioLimit &&
+    s.currency === DEFAULT_SETTINGS.currency
+  );
 }
 
 // 汇总当前全部状态为一个文档

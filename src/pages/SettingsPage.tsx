@@ -20,6 +20,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { pullNow, pushNow, activateSync, deactivateSync } from '@/lib/sync';
 import { hasIdentity, getSyncUserId, setSyncIdentity, clearSyncIdentity } from '@/lib/syncIdentity';
 import { buildDocument, importDocument } from '@/lib/dataDocument';
+import { migrateLegacyData } from '@/lib/dataMigration';
 import { useCategories } from '@/hooks/useCategories';
 import { PageHeader } from '@/components/ui/Common';
 import { CategoryManageModal } from '@/components/ui/CategoryManageModal';
@@ -117,11 +118,17 @@ export default function SettingsPage() {
       return;
     }
     try {
+      // 先停旧身份会话（含 pending debounce），再写新身份，防止旧状态被误推
+      deactivateSync();
       await setSyncIdentity(value);
+      // 旧全局数据安全迁入当前身份命名空间（云端有数据则云端优先）
+      await migrateLegacyData();
+      // 重载当前命名空间数据
+      useSettingsStore.getState().reloadFromStorage();
+      usePortfolioStore.getState().reloadFromStorage();
       setPin('');
       setEditingIdentity(false);
-      // 切换身份时先停掉旧身份的实时订阅，再激活新身份
-      deactivateSync();
+      // 激活新身份：恢复该 uid 的同步基线 + 首次 pull 解决云端
       activateSync();
     } catch {
       setIdentityError('设置失败，请重试');
@@ -129,11 +136,14 @@ export default function SettingsPage() {
   };
 
   const handleClearIdentity = () => {
-    if (window.confirm('确定清除身份吗？清除后本设备将不再同步云端数据。')) {
+    if (window.confirm('确定清除身份吗？清除后本设备将不再同步云端数据，个人数据仅在输入相应密码后可见。')) {
       clearSyncIdentity();
       setPin('');
       setEditingIdentity(false);
       deactivateSync();
+      // 重载到无身份命名空间（干净默认，不再读取个人数据）
+      useSettingsStore.getState().reloadFromStorage();
+      usePortfolioStore.getState().reloadFromStorage();
     }
   };
 

@@ -4,11 +4,25 @@
 
 import { create } from 'zustand';
 import type { Asset, Portfolio, PortfolioType, Snapshot, SnapshotData, SyncStatus } from '@/types';
-import { generateId } from '@/lib/calculations';
+import { generateId, roundToCents } from '@/lib/calculations';
+import { storageKey } from '@/lib/syncIdentity';
 import { useSettingsStore } from './settingsStore';
 
 const STORAGE_KEY_PORTFOLIOS = 'asset-planner-portfolios';
 const STORAGE_KEY_SNAPSHOTS = 'asset-planner-snapshots';
+
+// 默认空方案（初始化 / 重载 / 全清共用）
+function createDefaultPortfolio(type: PortfolioType): Portfolio {
+  return {
+    id: generateId(),
+    userId: null,
+    name: type === 'base' ? '默认底仓' : '默认定投',
+    type,
+    assets: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
 
 // ---- localStorage helpers ----
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -97,49 +111,29 @@ interface PortfolioStore {
   // 本地落盘（供外部应用数据后调用）
   persistLocal: () => void;
 
+  // 按当前身份命名空间重载（身份切换 / 迁移后用）
+  reloadFromStorage: () => void;
+
   clearAll: () => void;
 }
 
 export const usePortfolioStore = create<PortfolioStore>((set, get) => {
-  // 初始化
-  const portfolios = loadFromStorage<Portfolio[]>(STORAGE_KEY_PORTFOLIOS, []);
+  // 初始化（读取当前身份命名空间的数据）
+  const portfolios = loadFromStorage<Portfolio[]>(storageKey(STORAGE_KEY_PORTFOLIOS), []);
   const basePortfolios = portfolios.filter((p) => p.type === 'base');
   const dcaPortfolios = portfolios.filter((p) => p.type === 'dca');
 
   // 确保至少有一个默认方案
-  if (basePortfolios.length === 0) {
-    const defaultBase: Portfolio = {
-      id: generateId(),
-      userId: null,
-      name: '默认底仓',
-      type: 'base',
-      assets: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    basePortfolios.push(defaultBase);
-  }
+  if (basePortfolios.length === 0) basePortfolios.push(createDefaultPortfolio('base'));
+  if (dcaPortfolios.length === 0) dcaPortfolios.push(createDefaultPortfolio('dca'));
 
-  if (dcaPortfolios.length === 0) {
-    const defaultDCA: Portfolio = {
-      id: generateId(),
-      userId: null,
-      name: '默认定投',
-      type: 'dca',
-      assets: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    dcaPortfolios.push(defaultDCA);
-  }
+  const snapshots = loadFromStorage<Snapshot[]>(storageKey(STORAGE_KEY_SNAPSHOTS), []);
 
-  const snapshots = loadFromStorage<Snapshot[]>(STORAGE_KEY_SNAPSHOTS, []);
-
-  // persist helper
+  // persist helper（写入当前身份命名空间）
   const persist = () => {
     const { basePortfolios: bp, dcaPortfolios: dp, snapshots: ss } = get();
-    saveToStorage(STORAGE_KEY_PORTFOLIOS, [...bp, ...dp]);
-    saveToStorage(STORAGE_KEY_SNAPSHOTS, ss);
+    saveToStorage(storageKey(STORAGE_KEY_PORTFOLIOS), [...bp, ...dp]);
+    saveToStorage(storageKey(STORAGE_KEY_SNAPSHOTS), ss);
   };
 
   // update portfolio helper
@@ -181,7 +175,7 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
           id: generateId(),
           category,
           name: name.trim() || category,
-          amount,
+          amount: roundToCents(amount),
           sortOrder: p.assets.length,
           code: opts?.code,
           watchlistId: opts?.watchlistId,
@@ -214,10 +208,12 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
 
     updateBaseAsset: (assetId, updates) => {
       const prev = get().getActiveBase()?.assets.find((a) => a.id === assetId);
+      const normalized =
+        updates.amount !== undefined ? { ...updates, amount: roundToCents(updates.amount) } : updates;
       updatePortfolio('base', (p) => ({
         ...p,
         assets: p.assets.map((a) =>
-          a.id === assetId ? { ...a, ...updates } : a
+          a.id === assetId ? { ...a, ...normalized } : a
         ),
       }));
       syncAssetToWatchlist(prev, updates);
@@ -236,10 +232,12 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
 
     updateDCAAsset: (assetId, updates) => {
       const prev = get().getActiveDCA()?.assets.find((a) => a.id === assetId);
+      const normalized =
+        updates.amount !== undefined ? { ...updates, amount: roundToCents(updates.amount) } : updates;
       updatePortfolio('dca', (p) => ({
         ...p,
         assets: p.assets.map((a) =>
-          a.id === assetId ? { ...a, ...updates } : a
+          a.id === assetId ? { ...a, ...normalized } : a
         ),
       }));
       syncAssetToWatchlist(prev, updates);
@@ -452,25 +450,28 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
 
     persistLocal: persist,
 
+    // 按当前身份命名空间重载数据（身份切换 / 迁移后调用）
+    reloadFromStorage: () => {
+      const portfolios = loadFromStorage<Portfolio[]>(storageKey(STORAGE_KEY_PORTFOLIOS), []);
+      let basePortfolios = portfolios.filter((p) => p.type === 'base');
+      let dcaPortfolios = portfolios.filter((p) => p.type === 'dca');
+      if (basePortfolios.length === 0) basePortfolios = [createDefaultPortfolio('base')];
+      if (dcaPortfolios.length === 0) dcaPortfolios = [createDefaultPortfolio('dca')];
+      const snapshots = loadFromStorage<Snapshot[]>(storageKey(STORAGE_KEY_SNAPSHOTS), []);
+
+      set({
+        basePortfolios,
+        dcaPortfolios,
+        snapshots,
+        activeBaseId: basePortfolios[0].id,
+        activeDCAId: dcaPortfolios[0].id,
+      });
+      persist();
+    },
+
     clearAll: () => {
-      const defaultBase: Portfolio = {
-        id: generateId(),
-        userId: null,
-        name: '默认底仓',
-        type: 'base',
-        assets: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      const defaultDCA: Portfolio = {
-        id: generateId(),
-        userId: null,
-        name: '默认定投',
-        type: 'dca',
-        assets: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+      const defaultBase = createDefaultPortfolio('base');
+      const defaultDCA = createDefaultPortfolio('dca');
 
       set({
         basePortfolios: [defaultBase],
@@ -480,8 +481,8 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
         activeDCAId: defaultDCA.id,
       });
 
-      localStorage.removeItem(STORAGE_KEY_PORTFOLIOS);
-      localStorage.removeItem(STORAGE_KEY_SNAPSHOTS);
+      localStorage.removeItem(storageKey(STORAGE_KEY_PORTFOLIOS));
+      localStorage.removeItem(storageKey(STORAGE_KEY_SNAPSHOTS));
     },
   };
 });

@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { initSync } from '@/lib/sync';
 import { mergeDuplicateCategories } from '@/lib/categoryMerge';
+import { migrateLegacyData } from '@/lib/dataMigration';
 import TabBar from '@/components/layout/TabBar';
 import DashboardPage from '@/pages/DashboardPage';
 import BasePage from '@/pages/BasePage';
@@ -34,9 +35,23 @@ function AppContent() {
 
 export default function App() {
   useEffect(() => {
-    // 先归并品类脏数据，再订阅同步，合并结果随首次 push 上传
+    // 先归并品类脏数据，再迁移旧全局数据到当前身份命名空间，最后启动同步，
+    // 避免迁移完成前把空文档推上云端
     mergeDuplicateCategories();
-    return initSync();
+    let cancelled = false;
+    let cleanup: (() => void) | null = null;
+    (async () => {
+      try {
+        await migrateLegacyData();
+      } catch {
+        // 迁移失败不阻塞同步启动；下次启动会重试
+      }
+      if (!cancelled) cleanup = initSync();
+    })();
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
   }, []);
 
   return (

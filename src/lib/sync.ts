@@ -3,10 +3,11 @@
 // ============================================================
 
 import { isSyncEnabled, fetchCloudDocument, saveCloudDocument, subscribeToCloudChanges } from '@/lib/supabase';
-import { buildDocument, applyDocument, documentFingerprint, type CloudDocument } from '@/lib/dataDocument';
+import { buildDocument, applyDocument, documentFingerprint, isPristine } from '@/lib/dataDocument';
+import { getSyncUserId } from '@/lib/syncIdentity';
 import { usePortfolioStore } from '@/stores/portfolioStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { DEFAULT_SETTINGS, type SyncStatus } from '@/types';
+import type { SyncStatus } from '@/types';
 
 // 记录本设备最后一次推送到云端的状态，用于回声识别与增量比较
 let lastPushedAt: string | null = null;
@@ -25,25 +26,37 @@ function setStatus(status: SyncStatus) {
 
 function debounce<T extends (...args: unknown[]) => void>(fn: T, delay: number) {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const wrapped = (...args: unknown[]) => {
+  const wrapped: T & { cancel: () => void } = ((...args: unknown[]) => {
     clearTimeout(timer);
     timer = setTimeout(() => fn(...args), delay);
-  };
-  return wrapped as (...args: Parameters<T>) => void;
+  }) as T & { cancel: () => void };
+  wrapped.cancel = () => clearTimeout(timer);
+  return wrapped;
 }
 
-// 全新设备 / 全新用户的判空
-function isPristine(doc: CloudDocument): boolean {
-  const s = doc.settings || ({} as CloudDocument['settings']);
-  return (
-    doc.portfolios.every((p) => p.assets.length === 0) &&
-    doc.snapshots.length === 0 &&
-    (s.watchlist || []).length === 0 &&
-    ((s.categories || []).every((c) => c.isBuiltin)) &&
-    !s.monthlySalary &&
-    s.dcaRatioLimit === DEFAULT_SETTINGS.dcaRatioLimit &&
-    s.currency === DEFAULT_SETTINGS.currency
-  );
+// ---- per-uid 同步基线：切回旧身份时恢复 lastPushedAt/fingerprint，
+//      让 pullNow 走 echo/采纳云端路径，而不是"首次连接本地优先"覆盖更新的云端 ----
+const SYNC_STATE_BASE = 'asset-planner-sync-state';
+
+function loadSyncState(): { at: string | null; fp: string } | null {
+  const uid = getSyncUserId();
+  if (!uid) return null;
+  try {
+    const raw = localStorage.getItem(`${SYNC_STATE_BASE}:${uid}`);
+    return raw ? (JSON.parse(raw) as { at: string | null; fp: string }) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSyncState(at: string, fp: string): void {
+  const uid = getSyncUserId();
+  if (!uid) return;
+  try {
+    localStorage.setItem(`${SYNC_STATE_BASE}:${uid}`, JSON.stringify({ at, fp }));
+  } catch {
+    // storage full or unavailable
+  }
 }
 
 // 把当前本地状态整份推送到云端
@@ -67,6 +80,7 @@ export async function pushNow(): Promise<boolean> {
         const updatedAt = await saveCloudDocument(doc);
         lastPushedAt = updatedAt;
         lastPushedFingerprint = documentFingerprint(doc);
+        saveSyncState(updatedAt, lastPushedFingerprint);
       } catch {
         setStatus(navigator.onLine ? 'error' : 'offline');
         return false;
@@ -107,6 +121,7 @@ export async function pullNow(): Promise<boolean> {
             applyDocument(remote.data);
             lastPushedAt = remote.updatedAt;
             lastPushedFingerprint = documentFingerprint(remote.data);
+            saveSyncState(lastPushedAt, lastPushedFingerprint);
             setStatus('synced');
           } else {
             await pushNow();
@@ -131,6 +146,7 @@ export async function pullNow(): Promise<boolean> {
           applyDocument(remote.data);
           lastPushedAt = remote.updatedAt;
           lastPushedFingerprint = documentFingerprint(remote.data);
+          saveSyncState(lastPushedAt, lastPushedFingerprint);
           setStatus('synced');
         } else {
           await pushNow();
@@ -150,15 +166,16 @@ const debouncedPush = debounce(() => pushNow(), 800);
 const debouncedPull = debounce(() => pullNow(), 300);
 
 // 数据变更后调用：内容未变化则跳过
+// 以 syncStarted 为门（而非 isSyncEnabled），身份切换间隙的 store 写不会提前推送
 export function schedulePush() {
-  if (!isSyncEnabled()) return;
+  if (!syncStarted) return;
   if (documentFingerprint(buildDocument()) === lastPushedFingerprint) return;
   debouncedPush();
 }
 
 // 需要拉取时调用
 export function schedulePull() {
-  if (!isSyncEnabled()) return;
+  if (!syncStarted) return;
   debouncedPull();
 }
 
@@ -170,6 +187,11 @@ function startSync(): void {
   if (syncStarted) return;
   if (!isSyncEnabled()) return;
   syncStarted = true;
+
+  // 恢复该 uid 上次同步基线（切回旧身份时避免本地优先覆盖更新的云端）
+  const state = loadSyncState();
+  lastPushedAt = state?.at ?? null;
+  lastPushedFingerprint = state?.fp ?? '';
 
   const unsubs: Array<() => void> = [];
   unsubs.push(subscribeToCloudChanges(() => schedulePull()));
@@ -215,6 +237,9 @@ export function activateSync(): void {
 // 清除身份后调用：停止同步并重置状态
 export function deactivateSync(): void {
   cleanupSync?.();
+  // 取消 pending 的 debounce 推送/拉取，防止旧身份状态被推进新身份的云端行
+  debouncedPush.cancel();
+  debouncedPull.cancel();
   lastPushedAt = null;
   lastPushedFingerprint = '';
   setStatus('idle');

@@ -18,6 +18,13 @@ export function hasIdentity(): boolean {
   return Boolean(getSyncUserId());
 }
 
+// 本地数据按身份分命名空间：无 PIN → ':default'，有 PIN → ':<uid>'
+// 身份切换时 Store 重载对应命名空间，避免无 PIN 泄漏个人数据
+export function storageKey(base: string): string {
+  const uid = getSyncUserId();
+  return uid ? `${base}:${uid}` : `${base}:default`;
+}
+
 // PIN 的 SHA-256 十六进制哈希，作为云端 user_id
 export async function deriveUserId(pin: string): Promise<string> {
   const data = new TextEncoder().encode(pin);
