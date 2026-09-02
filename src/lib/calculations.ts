@@ -60,6 +60,11 @@ export function isDCABudgetExceeded(assets: Asset[], settings: UserSettings): bo
 
 // ---- 工具函数 ----
 
+/** 金额取整到分（2 位小数），消除 JSON 反序列化/浮点运算引入的尾差（如 15 → 14.98…） */
+export function roundToCents(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 /** 生成 UUID */
 export function generateId(): string {
   return crypto.randomUUID();

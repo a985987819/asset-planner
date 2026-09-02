@@ -170,7 +170,6 @@ export default function DCAPage() {
 
   const handleQuickAdd = (item: WatchlistItem, amount: number) => {
     addDCAAsset(item.categoryId, item.name, amount, { watchlistId: item.id, code: item.code });
-    setPickerOpen(false);
   };
 
   const handleManualInput = () => {
@@ -544,6 +543,7 @@ export default function DCAPage() {
         onClose={() => setPickerOpen(false)}
         onQuickAdd={handleQuickAdd}
         onManualInput={handleManualInput}
+        closeOnOverlay={false}
       />
 
       <Modal open={formModalOpen} onClose={() => setFormModalOpen(false)} title={editingId ? '编辑定投' : '添加定投'}>

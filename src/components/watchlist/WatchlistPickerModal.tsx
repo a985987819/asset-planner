@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Check } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useCategories } from '@/hooks/useCategories';
 import type { WatchlistItem } from '@/types';
@@ -11,6 +11,8 @@ interface WatchlistPickerModalProps {
   onQuickAdd: (item: WatchlistItem, amount: number) => void;
   onManualInput: () => void;
   title?: string;
+  /** 点击遮罩是否关闭，默认 true */
+  closeOnOverlay?: boolean;
 }
 
 export function WatchlistPickerModal({
@@ -19,6 +21,7 @@ export function WatchlistPickerModal({
   onQuickAdd,
   onManualInput,
   title = '选择自选',
+  closeOnOverlay = true,
 }: WatchlistPickerModalProps) {
   const watchlist = useSettingsStore((state) => state.watchlist);
   const { categories, getLabel, getColor } = useCategories();
@@ -75,8 +78,21 @@ export function WatchlistPickerModal({
     });
   };
 
+  // 所有已填金额的条目（跨品类/搜索，一次性完成）
+  const filledEntries = watchlist
+    .map((item) => ({ item, raw: amounts[item.id] }))
+    .filter(({ raw }) => raw && !Number.isNaN(parseFloat(raw)) && parseFloat(raw) > 0);
+
+  const handleBatchComplete = () => {
+    if (filledEntries.length === 0) return;
+    filledEntries.forEach(({ item, raw }) => onQuickAdd(item, parseFloat(raw)));
+    setAmounts({});
+    setValidating({});
+    onClose();
+  };
+
   return (
-    <Modal open={open} onClose={onClose} title={title} maxWidth="max-w-lg">
+    <Modal open={open} onClose={onClose} title={title} maxWidth="max-w-lg" closeOnOverlay={closeOnOverlay}>
       {watchlist.length === 0 ? (
         <div className="py-6 text-center text-sm text-gray-400">
           暂无自选条目，请先在「自选管理」页面添加。
@@ -181,6 +197,12 @@ export function WatchlistPickerModal({
             </div>
           )}
         </>
+      )}
+
+      {filledEntries.length > 0 && (
+        <button onClick={handleBatchComplete} className="btn-primary mt-3 w-full">
+          <Check size={16} /> 批量完成（{filledEntries.length} 项）
+        </button>
       )}
 
       <button

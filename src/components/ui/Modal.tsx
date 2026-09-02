@@ -12,6 +12,8 @@ interface ModalProps {
   children: React.ReactNode;
   maxWidth?: string;
   maxHeight?: string;
+  /** 点击遮罩是否关闭，默认 true */
+  closeOnOverlay?: boolean;
 }
 
 export function Modal({
@@ -21,6 +23,7 @@ export function Modal({
   children,
   maxWidth = 'max-w-md',
   maxHeight = 'max-h-[92vh]',
+  closeOnOverlay = true,
 }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -50,7 +53,7 @@ export function Modal({
       ref={overlayRef}
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40"
       onClick={(e) => {
-        if (e.target === overlayRef.current) onClose();
+        if (closeOnOverlay && e.target === overlayRef.current) onClose();
       }}
     >
       <div

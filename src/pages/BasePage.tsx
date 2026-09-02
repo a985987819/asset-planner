@@ -157,7 +157,6 @@ export default function BasePage() {
 
   const handleQuickAdd = (item: WatchlistItem, amount: number) => {
     addBaseAsset(item.categoryId, item.name, amount, { watchlistId: item.id, code: item.code });
-    setPickerOpen(false);
   };
 
   const handleManualInput = () => {
@@ -492,6 +491,7 @@ export default function BasePage() {
         onClose={() => setPickerOpen(false)}
         onQuickAdd={handleQuickAdd}
         onManualInput={handleManualInput}
+        closeOnOverlay={false}
       />
 
       <Modal open={formModalOpen} onClose={() => setFormModalOpen(false)} title={editingId ? '编辑资产' : '添加资产'}>
