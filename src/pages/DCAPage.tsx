@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { Plus, Pencil, Trash2, FolderOpen, AlertTriangle, Camera, Search, X, RotateCcw, Link } from 'lucide-react';
 import { usePortfolioStore } from '@/stores/portfolioStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -15,10 +14,11 @@ import { useCategories } from '@/hooks/useCategories';
 import type { WatchlistItem } from '@/types';
 import { PageHeader, EmptyState } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
-import { CustomPieTooltip } from '@/components/charts/CustomPieTooltip';
 import { WatchlistPickerModal } from '@/components/watchlist/WatchlistPickerModal';
 import { ReceiptPreviewModal } from '@/components/snapshot/ReceiptPreviewModal';
 import { SnapshotManageModal } from '@/components/snapshot/SnapshotManageModal';
+import { SankeyChart } from '@/components/charts/SankeyChart';
+import { buildSankeyData } from '@/lib/sankey';
 
 interface AssetFormData {
   category: string;
@@ -132,6 +132,10 @@ export default function DCAPage() {
   );
   const ratios = useMemo(() => aggregateRatios(chartAssets), [chartAssets]);
   const visibleTotal = ratios.reduce((s, i) => s + i.amount, 0);
+
+  // 桑基图：日定投 → 品类 → 具体基金（与饼图同口径，随隐藏/排除联动）
+  const getCategoryInfo = (id: string) => ({ name: getLabel(id), color: getColor(id) });
+  const sankeyData = buildSankeyData(chartAssets, getCategoryInfo);
 
   // 历史记录
   const latestSnapshot = snapshots[0] ?? null;
@@ -361,33 +365,16 @@ export default function DCAPage() {
               )}
             </span>
           </div>
-          <div className="flex flex-col items-center gap-4 sm:flex-row">
-            <div id="dca-pie" className="h-40 w-40 flex-shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={ratios}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={30}
-                    outerRadius={48}
-                    paddingAngle={2}
-                    dataKey="ratio"
-                    nameKey="category"
-                  >
-                    {ratios.map((entry) => (
-                      <Cell key={entry.category} fill={getColor(entry.category)} stroke="none" />
-                    ))}
-                  </Pie>
-                  <CustomPieTooltip
-                    getLabel={getLabel}
-                    formatPercent={formatPercent}
-                    formatMoney={formatMoney}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div id="dca-legend" className="w-full flex-1 space-y-1.5">
+          <div className="w-full">
+            <SankeyChart
+              data={sankeyData}
+              formatValue={formatMoney}
+              rootLabel="日定投"
+              height={240}
+              emptyText="暂无定投数据"
+            />
+          </div>
+          <div id="dca-legend" className="mt-3 w-full space-y-1.5">
               {ratiosAll.map((item) => {
                 const isHidden = hiddenCategories.has(item.category);
                 return (
@@ -419,7 +406,6 @@ export default function DCAPage() {
                 </button>
               )}
             </div>
-          </div>
         </div>
       )}
 

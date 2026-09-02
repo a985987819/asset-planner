@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Trash2, Eye, GitCompare, Copy } from 'lucide-react';
+import { Trash2, Eye, GitCompare, Copy, TrendingUp } from 'lucide-react';
 import type { Snapshot } from '@/types';
 import { Modal } from '@/components/ui/Modal';
 import { formatMoney } from '@/lib/calculations';
@@ -27,7 +27,7 @@ export function SnapshotManageModal({
 }: SnapshotManageModalProps) {
   const [receiptSnapshot, setReceiptSnapshot] = useState<Snapshot | null>(null);
   const [compareSelected, setCompareSelected] = useState<string[]>([]);
-  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareSnapshots, setCompareSnapshots] = useState<Snapshot[]>([]);
 
   const groupedSnapshots = useMemo(() => {
     const map = new Map<string, Snapshot[]>();
@@ -40,9 +40,15 @@ export function SnapshotManageModal({
     return Array.from(map.entries());
   }, [snapshots]);
 
-  const selectedSnapshots = compareSelected
-    .map((id) => snapshots.find((snapshot) => snapshot.id === id) ?? null)
-    .filter((snapshot): snapshot is Snapshot => Boolean(snapshot));
+  // 选中的快照按时间升序，供对比弹窗使用
+  const sortedSelected = useMemo(
+    () =>
+      compareSelected
+        .map((id) => snapshots.find((snapshot) => snapshot.id === id) ?? null)
+        .filter((snapshot): snapshot is Snapshot => Boolean(snapshot))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    [compareSelected, snapshots]
+  );
 
   return (
     <>
@@ -61,15 +67,18 @@ export function SnapshotManageModal({
           </div>
         ) : (
           <>
-            {compareSelected.length === 2 && (
+            {sortedSelected.length >= 2 && (
               <div className="mb-3">
-                <button onClick={() => setCompareOpen(true)} className="btn-primary w-full text-sm">
+                <button
+                  onClick={() => setCompareSnapshots(sortedSelected)}
+                  className="btn-primary w-full text-sm"
+                >
                   <GitCompare size={16} />
-                  对比选中的 2 条记录
+                  对比选中的 {sortedSelected.length} 条记录
                 </button>
               </div>
             )}
-            {compareSelected.length === 1 && (
+            {sortedSelected.length === 1 && (
               <div className="mb-2 text-center text-xs text-gray-400">
                 已选择 1 条记录，再选 1 条即可对比。
               </div>
@@ -83,6 +92,10 @@ export function SnapshotManageModal({
                   </div>
                   <div className="space-y-2">
                     {items.map((snapshot) => {
+                      // snapshots 为最新在前，find 返回时间上一条
+                      const prev = snapshots.find(
+                        (s) => s.id !== snapshot.id && s.createdAt.localeCompare(snapshot.createdAt) < 0
+                      );
                       const isSelected = compareSelected.includes(snapshot.id);
                       const total = snapshot.snapshotData.basePortfolio.assets.reduce(
                         (sum, asset) => sum + asset.amount,
@@ -102,15 +115,11 @@ export function SnapshotManageModal({
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => {
-                              setCompareSelected((prev) => {
-                                if (prev.includes(snapshot.id)) {
-                                  return prev.filter((id) => id !== snapshot.id);
-                                }
-                                if (prev.length >= 2) {
-                                  return [prev[1], snapshot.id];
-                                }
-                                return [...prev, snapshot.id];
-                              });
+                              setCompareSelected((prevIds) =>
+                                prevIds.includes(snapshot.id)
+                                  ? prevIds.filter((id) => id !== snapshot.id)
+                                  : [...prevIds, snapshot.id]
+                              );
                             }}
                             className="h-4 w-4 flex-shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                           />
@@ -128,6 +137,15 @@ export function SnapshotManageModal({
                           </div>
 
                           <div className="ml-1 flex gap-1">
+                            {prev && (
+                              <button
+                                onClick={() => setCompareSnapshots([prev, snapshot])}
+                                className="rounded-lg p-1.5 text-gray-400 hover:bg-primary-100 hover:text-primary-600"
+                                title="与上一期对比"
+                              >
+                                <TrendingUp size={14} />
+                              </button>
+                            )}
                             <button
                               onClick={() => setReceiptSnapshot(snapshot)}
                               className="rounded-lg p-1.5 text-gray-400 hover:bg-primary-100 hover:text-primary-600"
@@ -152,7 +170,7 @@ export function SnapshotManageModal({
                               onClick={() => {
                                 if (window.confirm('确定要删除这条历史记录吗？')) {
                                   removeSnapshot(snapshot.id);
-                                  setCompareSelected((prev) => prev.filter((id) => id !== snapshot.id));
+                                  setCompareSelected((prevIds) => prevIds.filter((id) => id !== snapshot.id));
                                 }
                               }}
                               className="rounded-lg p-1.5 text-gray-400 hover:bg-red-100 hover:text-red-500"
@@ -178,12 +196,11 @@ export function SnapshotManageModal({
         snapshot={receiptSnapshot}
       />
 
-      {selectedSnapshots.length === 2 && (
+      {compareSnapshots.length >= 2 && (
         <SnapshotCompareModal
-          open={compareOpen}
-          onClose={() => setCompareOpen(false)}
-          snapshotA={selectedSnapshots[0]}
-          snapshotB={selectedSnapshots[1]}
+          open={compareSnapshots.length >= 2}
+          onClose={() => setCompareSnapshots([])}
+          snapshots={compareSnapshots}
         />
       )}
     </>

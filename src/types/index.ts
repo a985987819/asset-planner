@@ -92,18 +92,15 @@ export interface SnapshotData {
   receiptImage?: string;  // base64 PNG，小票图片（v3 新增）
 }
 
-// 快照对比项
-export interface SnapshotCompareItem {
+// 快照对比项（多快照版：amounts/ratios 与传入 snapshots 数组顺序一一对应）
+export interface SnapshotCompareRow {
   categoryId: string;
   categoryName: string;
-  amountA: number;
-  amountB: number;
-  ratioA: number;
-  ratioB: number;
-  changeAmount: number;
-  changeRatio: number;     // 比例变化百分点
+  amounts: number[];
+  ratios: number[];
+  changeAmount: number; // 末项 - 首项
+  changeRatio: number;  // 末项 - 首项（比例变化百分点）
   trend: 'up' | 'down' | 'flat';
-  assetDetails?: { name: string; amountA: number; amountB: number }[];
 }
 
 // ---- 用户设置 ----

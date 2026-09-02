@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   PiggyBank,
   TrendingUp,
+  LineChart,
   Settings,
   Star,
 } from 'lucide-react';
@@ -15,6 +16,7 @@ const tabs = [
   { path: '/', label: '总览', icon: LayoutDashboard },
   { path: '/base', label: '底仓', icon: PiggyBank },
   { path: '/dca', label: '定投', icon: TrendingUp },
+  { path: '/trend', label: '趋势', icon: LineChart },
   { path: '/watchlist', label: '自选', icon: Star },
   { path: '/settings', label: '设置', icon: Settings },
 ];

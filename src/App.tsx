@@ -10,6 +10,7 @@ import TabBar from '@/components/layout/TabBar';
 import DashboardPage from '@/pages/DashboardPage';
 import BasePage from '@/pages/BasePage';
 import DCAPage from '@/pages/DCAPage';
+import TrendPage from '@/pages/TrendPage';
 import SettingsPage from '@/pages/SettingsPage';
 import WatchlistPage from '@/pages/WatchlistPage';
 
@@ -21,6 +22,7 @@ function AppContent() {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/base" element={<BasePage />} />
           <Route path="/dca" element={<DCAPage />} />
+          <Route path="/trend" element={<TrendPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
         </Routes>

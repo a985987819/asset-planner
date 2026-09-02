@@ -1,5 +1,6 @@
 // ============================================================
-// 快照对比弹窗 — 金额/比例对比 + 品类/明细切换
+// 快照对比弹窗 — 多快照（N 条）金额/比例对比 + 品类/明细切换
+// 明细按资产 id 匹配（旧数据无 id 时回退 category|name）
 // ============================================================
 
 import { useMemo, useState } from 'react';
@@ -7,143 +8,142 @@ import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { useCategories } from '@/hooks/useCategories';
 import { formatMoney, formatPercent } from '@/lib/calculations';
-import type { Snapshot, SnapshotCompareItem } from '@/types';
+import type { Asset, Snapshot, SnapshotCompareRow } from '@/types';
 
 interface SnapshotCompareModalProps {
   open: boolean;
   onClose: () => void;
-  snapshotA: Snapshot;
-  snapshotB: Snapshot;
+  snapshots: Snapshot[]; // 已按 createdAt 升序
 }
 
 type CompareMode = 'amount' | 'ratio';
 type DetailLevel = 'category' | 'detail';
 
+// 明细匹配主键：优先资产 id，旧数据无 id 时回退 category|name
+const keyOf = (a: Asset) => (a.id ? `id:${a.id}` : `cat:${a.category}|${a.name}`);
+
+function formatInterval(a: string, b: string): string {
+  const days = Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
+  if (days < 1) return '同日';
+  if (days < 30) return `${days} 天`;
+  return `${days} 天（约 ${Math.round(days / 30)} 个月）`;
+}
+
 export function SnapshotCompareModal({
   open,
   onClose,
-  snapshotA,
-  snapshotB,
+  snapshots,
 }: SnapshotCompareModalProps) {
   const { getLabel, getColor } = useCategories();
   const [mode, setMode] = useState<CompareMode>('amount');
   const [detailLevel, setDetailLevel] = useState<DetailLevel>('category');
 
-  // 提取两个快照的品类设置（可能不同）
-  const catsA = snapshotA.snapshotData.settings?.categories ?? [];
-  const catsB = snapshotB.snapshotData.settings?.categories ?? [];
-
-  const compareItems = useMemo(() => {
-    const assetsA = snapshotA.snapshotData.basePortfolio?.assets ?? [];
-    const assetsB = snapshotB.snapshotData.basePortfolio?.assets ?? [];
-
-    // 创建品类查找
-    const catMap = new Map<string, { name: string; color: string }>();
-    for (const c of [...catsA, ...catsB]) {
-      if (!catMap.has(c.id)) catMap.set(c.id, { name: c.name, color: c.color });
+  // 每个快照的品类设置（可能不同），并集用于品类名/颜色
+  const catMap = useMemo(() => {
+    const map = new Map<string, { name: string; color: string }>();
+    for (const s of snapshots) {
+      for (const c of s.snapshotData.settings?.categories ?? []) {
+        if (!map.has(c.id)) map.set(c.id, { name: c.name, color: c.color });
+      }
     }
+    return map;
+  }, [snapshots]);
 
+  // 每个快照的底仓资产 + 总额 + 品类聚合
+  const perSnapshot = useMemo(
+    () =>
+      snapshots.map((s) => {
+        const assets = s.snapshotData.basePortfolio?.assets ?? [];
+        const total = assets.reduce((sum, a) => sum + a.amount, 0);
+        const byCat = new Map<string, number>();
+        for (const a of assets) byCat.set(a.category, (byCat.get(a.category) ?? 0) + a.amount);
+        return { assets, total, byCat };
+      }),
+    [snapshots]
+  );
+
+  const compareRows = useMemo<SnapshotCompareRow[]>(() => {
     if (detailLevel === 'category') {
-      // 按品类汇总
-      const totalA = assetsA.reduce((s, a) => s + a.amount, 0);
-      const totalB = assetsB.reduce((s, a) => s + a.amount, 0);
-
-      const groupA = new Map<string, number>();
-      const groupB = new Map<string, number>();
-      for (const a of assetsA) groupA.set(a.category, (groupA.get(a.category) || 0) + a.amount);
-      for (const a of assetsB) groupB.set(a.category, (groupB.get(a.category) || 0) + a.amount);
-
-      const allCategories = new Set([...groupA.keys(), ...groupB.keys()]);
-
-      return Array.from(allCategories).map((catId): SnapshotCompareItem => {
-        const amountA = groupA.get(catId) || 0;
-        const amountB = groupB.get(catId) || 0;
-        const ratioA = totalA > 0 ? (amountA / totalA) * 100 : 0;
-        const ratioB = totalB > 0 ? (amountB / totalB) * 100 : 0;
-        const changeAmount = amountB - amountA;
-        const changeRatio = ratioB - ratioA;
-
+      const allCats = new Set(perSnapshot.flatMap((p) => Array.from(p.byCat.keys())));
+      return Array.from(allCats).map((catId): SnapshotCompareRow => {
+        const amounts = perSnapshot.map((p) => p.byCat.get(catId) ?? 0);
+        const ratios = amounts.map((amt, i) =>
+          perSnapshot[i].total > 0 ? (amt / perSnapshot[i].total) * 100 : 0
+        );
+        const changeAmount = amounts[amounts.length - 1] - amounts[0];
+        const changeRatio = ratios[ratios.length - 1] - ratios[0];
         return {
           categoryId: catId,
           categoryName: catMap.get(catId)?.name ?? catId,
-          amountA, amountB, ratioA, ratioB,
+          amounts,
+          ratios,
           changeAmount,
           changeRatio,
           trend: changeAmount > 0 ? 'up' : changeAmount < 0 ? 'down' : 'flat',
         };
       });
-    } else {
-      // 按资产明细
-      const allNames = new Set([
-        ...assetsA.map((a) => `${a.category}|${a.name}`),
-        ...assetsB.map((a) => `${a.category}|${a.name}`),
-      ]);
-
-      const findAsset = (assets: typeof assetsA, key: string) => {
-        for (const a of assets) {
-          if (`${a.category}|${a.name}` === key) return a;
-        }
-        return null;
-      };
-
-      const totalA = assetsA.reduce((s, a) => s + a.amount, 0);
-      const totalB = assetsB.reduce((s, a) => s + a.amount, 0);
-
-      return Array.from(allNames).map((key): SnapshotCompareItem => {
-        const assetA = findAsset(assetsA, key);
-        const assetB = findAsset(assetsB, key);
-        const amountA = assetA?.amount ?? 0;
-        const amountB = assetB?.amount ?? 0;
-        const catId = (assetA ?? assetB)?.category ?? '';
-        const name = (assetA ?? assetB)?.name ?? key.split('|')[1];
-        const ratioA = totalA > 0 ? (amountA / totalA) * 100 : 0;
-        const ratioB = totalB > 0 ? (amountB / totalB) * 100 : 0;
-        const changeAmount = amountB - amountA;
-
-        return {
-          categoryId: catId,
-          categoryName: `${getLabel(catId)} · ${name}`,
-          amountA, amountB, ratioA, ratioB,
-          changeAmount,
-          changeRatio: ratioB - ratioA,
-          trend: changeAmount > 0 ? 'up' : changeAmount < 0 ? 'down' : 'flat',
-        };
-      });
     }
-  }, [snapshotA, snapshotB, detailLevel, catsA, catsB, getLabel]);
 
-  const totalA = compareItems.reduce((s, i) => s + i.amountA, 0);
-  const totalB = compareItems.reduce((s, i) => s + i.amountB, 0);
+    // 按资产明细：主键 = 资产 id（回退 category|name）
+    const perSnapshotMaps = perSnapshot.map((p) => new Map(p.assets.map((a) => [keyOf(a), a])));
+    const allKeys = new Set(perSnapshotMaps.flatMap((m) => Array.from(m.keys())));
+    return Array.from(allKeys).map((key): SnapshotCompareRow => {
+      const assets = perSnapshotMaps.map((m) => m.get(key) ?? null);
+      const amounts = assets.map((a) => a?.amount ?? 0);
+      const ratios = amounts.map((amt, i) =>
+        perSnapshot[i].total > 0 ? (amt / perSnapshot[i].total) * 100 : 0
+      );
+      const first = assets.find((a): a is Asset => Boolean(a));
+      const catId = first?.category ?? '';
+      const name = first?.name ?? key.split('|')[1] ?? key;
+      const changeAmount = amounts[amounts.length - 1] - amounts[0];
+      const changeRatio = ratios[ratios.length - 1] - ratios[0];
+      return {
+        categoryId: catId,
+        categoryName: `${getLabel(catId)} · ${name}`,
+        amounts,
+        ratios,
+        changeAmount,
+        changeRatio,
+        trend: changeAmount > 0 ? 'up' : changeAmount < 0 ? 'down' : 'flat',
+      };
+    });
+  }, [perSnapshot, detailLevel, catMap, getLabel]);
+
+  const totalA = perSnapshot[0]?.total ?? 0;
+  const totalB = perSnapshot[perSnapshot.length - 1]?.total ?? 0;
   const totalChange = totalB - totalA;
+  const interval = snapshots.length >= 2 ? formatInterval(snapshots[0].createdAt, snapshots[snapshots.length - 1].createdAt) : '';
 
   return (
     <Modal open={open} onClose={onClose} title="快照对比" maxWidth="max-w-2xl">
       {/* 快照标签 */}
-      <div className="flex items-center justify-center gap-4 mb-4 text-sm">
-        <div className="text-center">
-          <div className="font-medium text-gray-900">{snapshotA.label}</div>
-          <div className="text-xs text-gray-400">
-            {new Date(snapshotA.createdAt).toLocaleDateString('zh-CN')}
+      <div className="mb-4 flex items-center justify-center gap-3 overflow-x-auto text-sm">
+        {snapshots.map((s, i) => (
+          <div key={s.id} className="flex items-center gap-3">
+            {i > 0 && <div className="text-gray-300 text-lg">→</div>}
+            <div className="text-center">
+              <div className="font-medium text-gray-900">{s.label}</div>
+              <div className="text-xs text-gray-400">
+                {new Date(s.createdAt).toLocaleDateString('zh-CN')}
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="text-gray-300 text-lg">→</div>
-        <div className="text-center">
-          <div className="font-medium text-gray-900">{snapshotB.label}</div>
-          <div className="text-xs text-gray-400">
-            {new Date(snapshotB.createdAt).toLocaleDateString('zh-CN')}
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* 总变化 */}
-      <div className="flex items-center justify-center gap-2 mb-4 p-3 bg-gray-50 rounded-lg">
-        <span className="text-sm text-gray-500">总变化：</span>
-        <span className={`text-lg font-bold ${totalChange > 0 ? 'text-green-600' : totalChange < 0 ? 'text-red-600' : 'text-gray-500'}`}>
-          {totalChange > 0 ? '+' : ''}{formatMoney(totalChange)}
-        </span>
-        <span className="text-xs text-gray-400">
-          ({formatMoney(totalA)} → {formatMoney(totalB)})
-        </span>
+      {/* 总变化 + 区间时长 */}
+      <div className="mb-4 flex flex-col items-center gap-1 p-3 bg-gray-50 rounded-lg">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">总变化：</span>
+          <span className={`text-lg font-bold ${totalChange > 0 ? 'text-green-600' : totalChange < 0 ? 'text-red-600' : 'text-gray-500'}`}>
+            {totalChange > 0 ? '+' : ''}{formatMoney(totalChange)}
+          </span>
+          <span className="text-xs text-gray-400">
+            ({formatMoney(totalA)} → {formatMoney(totalB)})
+          </span>
+        </div>
+        {interval && <div className="text-xs text-gray-400">区间 {interval}</div>}
       </div>
 
       {/* 模式切换 */}
@@ -180,19 +180,19 @@ export function SnapshotCompareModal({
           <thead>
             <tr className="text-xs text-gray-400 border-b border-gray-100">
               <th className="text-left py-2 font-normal">品类</th>
-              <th className="text-right py-2 font-normal w-24">快照A</th>
-              <th className="text-right py-2 font-normal w-24">快照B</th>
+              {snapshots.map((s, i) => (
+                <th key={s.id} className="text-right py-2 font-normal w-24">
+                  {i === 0 ? '首期' : i === snapshots.length - 1 ? '末期' : `第${i + 1}期`}
+                </th>
+              ))}
               <th className="text-right py-2 font-normal w-24">变化</th>
               <th className="text-center py-2 font-normal w-12">趋势</th>
             </tr>
           </thead>
           <tbody>
-            {compareItems.map((item, i) => {
-              const changeValue =
-                mode === 'amount' ? item.changeAmount : item.changeRatio;
-              const valueA = mode === 'amount' ? item.amountA : item.ratioA;
-              const valueB = mode === 'amount' ? item.amountB : item.ratioB;
+            {compareRows.map((item, i) => {
               const formatValue = mode === 'amount' ? formatMoney : formatPercent;
+              const changeValue = mode === 'amount' ? item.changeAmount : item.changeRatio;
 
               return (
                 <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
@@ -207,10 +207,16 @@ export function SnapshotCompareModal({
                       </span>
                     </div>
                   </td>
-                  <td className="text-right py-2 text-gray-600">{formatValue(valueA)}</td>
-                  <td className="text-right py-2 text-gray-900 font-medium">
-                    {formatValue(valueB)}
-                  </td>
+                  {item.amounts.map((_, j) => (
+                    <td
+                      key={j}
+                      className={`text-right py-2 ${
+                        j === item.amounts.length - 1 ? 'text-gray-900 font-medium' : 'text-gray-600'
+                      }`}
+                    >
+                      {formatValue(mode === 'amount' ? item.amounts[j] : item.ratios[j])}
+                    </td>
+                  ))}
                   <td className="text-right py-2">
                     <span
                       className={
@@ -221,9 +227,8 @@ export function SnapshotCompareModal({
                           : 'text-gray-400'
                       }
                     >
-                      {item.trend === 'up' ? '+' : ''}
                       {mode === 'amount'
-                        ? formatMoney(changeValue as number)
+                        ? `${item.trend === 'up' ? '+' : ''}${formatMoney(changeValue as number)}`
                         : `${(changeValue as number) > 0 ? '+' : ''}${(changeValue as number).toFixed(1)}pp`}
                     </span>
                   </td>

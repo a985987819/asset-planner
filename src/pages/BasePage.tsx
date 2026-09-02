@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { Plus, Pencil, Trash2, FolderOpen, Camera, Search, X, RotateCcw, Link } from 'lucide-react';
 import { usePortfolioStore } from '@/stores/portfolioStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -8,10 +7,11 @@ import { useCategories } from '@/hooks/useCategories';
 import type { WatchlistItem, Snapshot } from '@/types';
 import { PageHeader, EmptyState } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
-import { CustomPieTooltip } from '@/components/charts/CustomPieTooltip';
 import { WatchlistPickerModal } from '@/components/watchlist/WatchlistPickerModal';
 import { ReceiptPreviewModal } from '@/components/snapshot/ReceiptPreviewModal';
 import { SnapshotManageModal } from '@/components/snapshot/SnapshotManageModal';
+import { SankeyChart } from '@/components/charts/SankeyChart';
+import { buildSankeyData } from '@/lib/sankey';
 
 interface AssetFormData {
   category: string;
@@ -122,6 +122,10 @@ export default function BasePage() {
   );
   const ratios = useMemo(() => aggregateRatios(chartAssets), [chartAssets]);
   const visibleTotal = ratios.reduce((s, i) => s + i.amount, 0);
+
+  // 桑基图：总资产 → 品类 → 具体基金（与饼图同口径，随隐藏/排除联动）
+  const getCategoryInfo = (id: string) => ({ name: getLabel(id), color: getColor(id) });
+  const sankeyData = buildSankeyData(chartAssets, getCategoryInfo);
 
   const latestSnapshot = snapshots[0] ?? null;
   const latestSnapshotTotal = latestSnapshot ? getSnapshotBaseTotal(latestSnapshot) : 0;
@@ -310,33 +314,16 @@ export default function BasePage() {
               )}
             </span>
           </div>
-          <div className="flex flex-col items-center gap-4 sm:flex-row">
-            <div id="base-pie" className="h-44 w-44 flex-shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={ratios}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={40}
-                    outerRadius={60}
-                    paddingAngle={2}
-                    dataKey="ratio"
-                    nameKey="category"
-                  >
-                    {ratios.map((entry) => (
-                      <Cell key={entry.category} fill={getColor(entry.category)} stroke="none" />
-                    ))}
-                  </Pie>
-                  <CustomPieTooltip
-                    getLabel={getLabel}
-                    formatPercent={formatPercent}
-                    formatMoney={formatMoney}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div id="base-legend" className="w-full flex-1 space-y-2">
+          <div className="w-full">
+            <SankeyChart
+              data={sankeyData}
+              formatValue={formatMoney}
+              rootLabel="总资产"
+              height={240}
+              emptyText="暂无资产数据"
+            />
+          </div>
+          <div id="base-legend" className="mt-3 w-full space-y-2">
               {ratiosAll.map((item) => {
                 const isHidden = hiddenCategories.has(item.category);
                 return (
@@ -369,7 +356,6 @@ export default function BasePage() {
                 </button>
               )}
             </div>
-          </div>
         </div>
       )}
 
