@@ -4,6 +4,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { Plus, Pencil, Trash2, Search, Star, Upload, Download } from 'lucide-react';
+import { Button, Input, Select } from 'animal-island-ui';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useCategories } from '@/hooks/useCategories';
 import { importWatchlistFromFile } from '@/lib/watchlistImport';
@@ -11,6 +12,8 @@ import { exportWatchlistToFile } from '@/lib/watchlistExport';
 import type { WatchlistItem } from '@/types';
 import { PageHeader, EmptyState } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { showToast } from '@/stores/toastStore';
 
 interface WatchlistForm {
   code: string;
@@ -38,6 +41,7 @@ export default function WatchlistPage() {
   const [form, setForm] = useState<WatchlistForm>(emptyForm);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 品类 Tab（全部 + 有条目的品类，按品类管理顺序）
@@ -87,13 +91,13 @@ export default function WatchlistPage() {
     setImporting(true);
     try {
       const r = await importWatchlistFromFile(file);
-      alert(
+      showToast(
         `导入完成：新增 ${r.added} 条` +
           (r.skipped > 0 ? `，跳过重复 ${r.skipped} 条` : '') +
           (r.missingCategory > 0 ? `，${r.missingCategory} 条品类未识别已归入默认品类` : '')
       );
     } catch {
-      alert('导入失败：请使用 .xlsx 文件（表头：代码、名称、品类、备注）');
+      showToast('导入失败：请使用 .xlsx 文件（表头：代码、名称、品类、备注）', 'error');
     } finally {
       setImporting(false);
     }
@@ -105,7 +109,7 @@ export default function WatchlistPage() {
     try {
       await exportWatchlistToFile();
     } catch {
-      alert('导出失败，请重试');
+      showToast('导出失败，请重试', 'error');
     } finally {
       setExporting(false);
     }
@@ -150,10 +154,12 @@ export default function WatchlistPage() {
     setModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('确定要移除该自选条目吗？')) {
-      deleteWatchlistItem(id);
-    }
+  const handleDelete = (id: string) => setDeleteTarget(id);
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    deleteWatchlistItem(deleteTarget);
+    setDeleteTarget(null);
   };
 
   return (
@@ -162,7 +168,7 @@ export default function WatchlistPage() {
         title="自选管理"
         subtitle="预先维护关注的基金/股票，添加资产时可直接选择"
         action={
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1">
             <input
               ref={fileInputRef}
               type="file"
@@ -170,32 +176,29 @@ export default function WatchlistPage() {
               className="hidden"
               onChange={handleFileChange}
             />
-            <button onClick={() => fileInputRef.current?.click()} disabled={importing} className="btn-secondary text-sm">
-              <Upload size={16} />
+            <Button onClick={() => fileInputRef.current?.click()} disabled={importing} size="small" icon={<Upload size={16} />}>
               导入
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={handleExport}
               disabled={exporting || watchlist.length === 0}
-              className="btn-secondary text-sm"
+              size="small"
+              icon={<Download size={16} />}
             >
-              <Download size={16} />
               导出
-            </button>
-            <button onClick={openAdd} className="btn-primary text-sm">
-              <Plus size={16} />
+            </Button>
+            <Button onClick={openAdd} type="primary" size="small" icon={<Plus size={16} />}>
               添加
-            </button>
+            </Button>
           </div>
         }
       />
 
       {/* 搜索 */}
       {watchlist.length > 0 && (
-        <div className="relative mb-4">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            className="input pl-9"
+        <div className="mb-4">
+          <Input
+            prefix={<Search size={14} className="text-gray-400" />}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="搜索代码或名称..."
@@ -236,10 +239,9 @@ export default function WatchlistPage() {
           title="还没有自选条目"
           description="添加关注的基金/股票，之后在底仓和定投页面可以直接选择"
           action={
-            <button onClick={openAdd} className="btn-primary">
-              <Plus size={16} />
+            <Button type="primary" size="small" icon={<Plus size={16} />} onClick={openAdd}>
               添加自选
-            </button>
+            </Button>
           }
         />
       ) : filtered.length === 0 ? (
@@ -281,18 +283,23 @@ export default function WatchlistPage() {
                 )}
               </div>
               <div className="flex gap-1 ml-2">
-                <button
+                <Button
+                  type="text"
+                  size="small"
+                  title="编辑"
+                  aria-label="编辑"
+                  icon={<Pencil size={15} />}
                   onClick={() => openEdit(item)}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-                >
-                  <Pencil size={15} />
-                </button>
-                <button
+                />
+                <Button
+                  type="text"
+                  size="small"
+                  title="删除"
+                  aria-label="删除"
+                  danger
+                  icon={<Trash2 size={15} />}
                   onClick={() => handleDelete(item.id)}
-                  className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"
-                >
-                  <Trash2 size={15} />
-                </button>
+                />
               </div>
             </div>
           ))}
@@ -308,8 +315,7 @@ export default function WatchlistPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="label">代码（选填）</label>
-            <input
-              className="input"
+            <Input
               value={form.code}
               onChange={(e) => setForm({ ...form, code: e.target.value })}
               placeholder="如 510300, 000001"
@@ -317,8 +323,7 @@ export default function WatchlistPage() {
           </div>
           <div>
             <label className="label">名称 *</label>
-            <input
-              className="input"
+            <Input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="如 沪深300ETF"
@@ -327,34 +332,35 @@ export default function WatchlistPage() {
           </div>
           <div>
             <label className="label">品类</label>
-            <select
-              className="select"
+            <Select
+              options={categories.map((cat) => ({ key: cat.id, label: cat.name }))}
               value={form.categoryId}
-              onChange={(e) =>
-                setForm({ ...form, categoryId: e.target.value })
-              }
-            >
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
+              onChange={(key) => setForm({ ...form, categoryId: key })}
+            />
           </div>
           <div>
             <label className="label">备注（选填）</label>
-            <input
-              className="input"
+            <Input
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               placeholder="如 跟踪沪深300指数"
             />
           </div>
-          <button type="submit" className="btn-primary w-full">
+          <Button htmlType="submit" type="primary" block>
             {editingId ? '保存修改' : '添加'}
-          </button>
+          </Button>
         </form>
       </Modal>
+
+      <ConfirmModal
+        open={deleteTarget !== null}
+        title="移除自选"
+        description="确定要移除该自选条目吗？此操作不可恢复。"
+        confirmText="移除"
+        danger
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

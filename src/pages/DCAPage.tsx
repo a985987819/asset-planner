@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, FolderOpen, AlertTriangle, Camera, Search, X, RotateCcw, Link } from 'lucide-react';
+import { Plus, Pencil, Trash2, FolderOpen, AlertTriangle, Camera, Search, RotateCcw, Link } from 'lucide-react';
+import { Button, Input, Select, Tag } from 'animal-island-ui';
 import { usePortfolioStore } from '@/stores/portfolioStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import {
@@ -14,6 +15,7 @@ import { useCategories } from '@/hooks/useCategories';
 import type { WatchlistItem } from '@/types';
 import { PageHeader, EmptyState } from '@/components/ui/Common';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { WatchlistPickerModal } from '@/components/watchlist/WatchlistPickerModal';
 import { ReceiptPreviewModal } from '@/components/snapshot/ReceiptPreviewModal';
 import { SnapshotManageModal } from '@/components/snapshot/SnapshotManageModal';
@@ -153,6 +155,10 @@ export default function DCAPage() {
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [showPortfolios, setShowPortfolios] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [portfolioDeleteOpen, setPortfolioDeleteOpen] = useState(false);
+  const [creatingPortfolio, setCreatingPortfolio] = useState(false);
+  const [newPortfolioName, setNewPortfolioName] = useState('');
 
   const openAdd = () => setPickerOpen(true);
 
@@ -218,15 +224,17 @@ export default function DCAPage() {
     setFormModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('确定要删除这条定投吗？')) {
-      removeDCAAsset(id);
-      setExcludedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
+  const handleDelete = (id: string) => setDeleteTarget(id);
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    removeDCAAsset(deleteTarget);
+    setExcludedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(deleteTarget);
+      return next;
+    });
+    setDeleteTarget(null);
   };
 
   const toggleExclude = (assetId: string) => {
@@ -251,21 +259,27 @@ export default function DCAPage() {
         title="每日定投"
         subtitle={portfolio ? `${portfolio.name} · 日 ${formatMoney(dailyTotal)} · 月 ${formatMoney(monthlyTotal)}` : ''}
         action={
-          <div className="flex gap-2">
-            <button
-              onClick={() => setReceiptOpen(true)}
-              className="btn-ghost text-xs"
+          <div className="flex items-center gap-1">
+            <Button
+              type="text"
+              size="small"
               title="保存今日记录"
+              aria-label="保存今日记录"
               disabled={assets.length === 0}
-            >
-              <Camera size={16} />
-            </button>
-            <button onClick={() => setShowPortfolios(true)} className="btn-ghost text-xs">
-              <FolderOpen size={16} />
-            </button>
-            <button onClick={openAdd} className="btn-primary text-sm">
-              <Plus size={16} /> 添加
-            </button>
+              icon={<Camera size={16} />}
+              onClick={() => setReceiptOpen(true)}
+            />
+            <Button
+              type="text"
+              size="small"
+              title="切换方案"
+              aria-label="切换方案"
+              icon={<FolderOpen size={16} />}
+              onClick={() => setShowPortfolios(true)}
+            />
+            <Button type="primary" size="small" icon={<Plus size={16} />} onClick={openAdd}>
+              添加
+            </Button>
           </div>
         }
       />
@@ -274,9 +288,9 @@ export default function DCAPage() {
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-medium text-gray-700">定投预算</h3>
           {budgetExceeded && (
-            <span className="badge-red flex items-center gap-1">
+            <Tag color="app-red" className="flex items-center gap-1">
               <AlertTriangle size={12} /> 超出预算
-            </span>
+            </Tag>
           )}
         </div>
         <div className="grid grid-cols-3 gap-3 text-center">
@@ -329,12 +343,12 @@ export default function DCAPage() {
             )}
           </div>
           <div className="mt-3 flex gap-2">
-            <button onClick={createDailySnapshot} className="btn-primary flex-1 text-sm">
+            <Button onClick={createDailySnapshot} type="primary" size="small" block>
               保存今日
-            </button>
-            <button onClick={() => setHistoryOpen(true)} className="btn-secondary flex-1 text-sm">
+            </Button>
+            <Button onClick={() => setHistoryOpen(true)} size="small" block>
               历史记录
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -344,9 +358,9 @@ export default function DCAPage() {
           <div className="text-sm font-medium text-gray-900">还没有历史记录</div>
           <div className="mt-1 text-xs text-gray-500">保存今日后，后续可以按日期回看并以历史记录为基准继续编辑。</div>
           <div className="mt-3">
-            <button onClick={createDailySnapshot} className="btn-primary w-full text-sm">
+            <Button onClick={createDailySnapshot} type="primary" size="small" block>
               保存今日
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -396,13 +410,16 @@ export default function DCAPage() {
                 );
               })}
               {hasAnyExclusion && (
-                <button
+                <Button
+                  type="text"
+                  size="small"
+                  block
+                  className="mt-1"
+                  icon={<RotateCcw size={12} />}
                   onClick={clearAllExclusions}
-                  className="btn-ghost mt-1 flex w-full items-center justify-center gap-1 text-xs text-gray-500"
                 >
-                  <RotateCcw size={12} />
                   重置排除（恢复全部统计）
-                </button>
+                </Button>
               )}
             </div>
         </div>
@@ -413,9 +430,9 @@ export default function DCAPage() {
           title="还没有定投计划"
           description="添加每日定投标的，系统会自动计算月定投额和工资占比"
           action={
-            <button onClick={openAdd} className="btn-primary">
-              <Plus size={16} /> 添加定投
-            </button>
+            <Button type="primary" size="small" icon={<Plus size={16} />} onClick={openAdd}>
+              添加定投
+            </Button>
           }
         />
       ) : (
@@ -445,27 +462,19 @@ export default function DCAPage() {
 
           {/* 搜索 + 排除提示 */}
           <div id="dca-search-bar" className="mb-3 flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                className="input pl-8 pr-8 text-sm"
-                placeholder="搜索定投名称..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
+            <Input
+              className="flex-1"
+              size="small"
+              prefix={<Search size={14} className="text-gray-400" />}
+              allowClear
+              placeholder="搜索定投名称..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
             {hasAnyExclusion && (
-              <button onClick={clearAllExclusions} className="btn-ghost flex-shrink-0 text-xs">
+              <Button type="text" size="small" onClick={clearAllExclusions}>
                 重置排除
-              </button>
+              </Button>
             )}
           </div>
 
@@ -517,18 +526,23 @@ export default function DCAPage() {
                       </div>
                     </div>
                     <div className="ml-2 flex gap-1">
-                      <button
+                      <Button
+                        type="text"
+                        size="small"
+                        title="编辑"
+                        aria-label="编辑"
+                        icon={<Pencil size={15} />}
                         onClick={() => openEdit(asset)}
-                        className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      <button
+                      />
+                      <Button
+                        type="text"
+                        size="small"
+                        title="删除"
+                        aria-label="删除"
+                        danger
+                        icon={<Trash2 size={15} />}
                         onClick={() => handleDelete(asset.id)}
-                        className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      />
                     </div>
                   </div>
                 );
@@ -550,40 +564,34 @@ export default function DCAPage() {
         <form onSubmit={handleFormSubmit} className="space-y-4">
           <div>
             <label className="label">关联自选（选填）</label>
-            <select
-              className="select"
+            <Select
+              options={[
+                { key: '', label: '不关联' },
+                ...watchlist.map((w) => ({
+                  key: w.id,
+                  label: w.code ? `${w.name} (${w.code})` : w.name,
+                })),
+              ]}
               value={form.watchlistId}
-              onChange={(e) => handleWatchlistSelect(e.target.value)}
-            >
-              <option value="">不关联</option>
-              {watchlist.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                  {w.code ? ` (${w.code})` : ''}
-                </option>
-              ))}
-            </select>
+              onChange={(key) => handleWatchlistSelect(key)}
+            />
             <p className="mt-1 text-xs text-gray-400">关联后名称/品类/代码与自选条目双向同步</p>
           </div>
           <div className="mt-3">
             <label className="label">品类</label>
-            <select
-              className="select"
+            <Select
+              options={
+                categories.length === 0
+                  ? [{ key: '', label: '请先添加品类' }]
+                  : categories.map((cat) => ({ key: cat.id, label: cat.name }))
+              }
               value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-            >
-              {categories.length === 0 && <option value="">请先添加品类</option>}
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
+              onChange={(key) => setForm({ ...form, category: key })}
+            />
           </div>
           <div className="mt-3">
             <label className="label">名称</label>
-            <input
-              className="input"
+            <Input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="如：沪深300ETF 定投"
@@ -592,8 +600,7 @@ export default function DCAPage() {
           </div>
           <div className="mt-3">
             <label className="label">代码（选填）</label>
-            <input
-              className="input"
+            <Input
               value={form.code}
               onChange={(e) => setForm({ ...form, code: e.target.value })}
               placeholder="如 510300, 000001"
@@ -601,8 +608,7 @@ export default function DCAPage() {
           </div>
           <div className="mt-3">
             <label className="label">每日定投金额 (元)</label>
-            <input
-              className="input"
+            <Input
               type="number"
               min="0"
               step="0.01"
@@ -613,9 +619,9 @@ export default function DCAPage() {
             />
             <p className="mt-1 text-xs text-gray-400">月定投 = 日定投 x 22 个交易日</p>
           </div>
-          <button type="submit" className="btn-primary w-full">
+          <Button htmlType="submit" type="primary" block>
             {editingId ? '保存修改' : '添加'}
-          </button>
+          </Button>
         </form>
       </Modal>
 
@@ -640,35 +646,80 @@ export default function DCAPage() {
                   {item.assets.length} 个品种 · 日定投 {formatMoney(calcDailyDCATotal(item.assets))}
                 </div>
               </div>
-              {item.id === activeDCAId && <span className="badge-blue">当前</span>}
+              {item.id === activeDCAId && <Tag color="app-blue">当前</Tag>}
             </div>
           ))}
         </div>
         <div className="flex gap-2">
-          <button
+          <Button
+            block
+            size="small"
+            icon={<Plus size={16} />}
             onClick={() => {
-              const name = prompt('方案名称:');
-              if (name?.trim()) createPortfolio(name.trim(), 'dca');
+              setNewPortfolioName('');
+              setCreatingPortfolio(true);
             }}
-            className="btn-secondary flex-1"
           >
-            <Plus size={16} /> 新建方案
-          </button>
+            新建方案
+          </Button>
           {dcaPortfolios.length > 1 && (
-            <button
-              onClick={() => {
-                if (window.confirm('确定要删除当前方案吗？')) {
-                  deleteActivePortfolio('dca');
-                  setShowPortfolios(false);
-                }
-              }}
-              className="btn-danger"
-            >
-              <Trash2 size={16} />
-            </button>
+            <Button
+              danger
+              size="small"
+              title="删除当前方案"
+              aria-label="删除当前方案"
+              icon={<Trash2 size={16} />}
+              onClick={() => setPortfolioDeleteOpen(true)}
+            />
           )}
         </div>
+        {creatingPortfolio && (
+          <div className="mt-3 flex gap-2">
+            <Input
+              className="flex-1"
+              value={newPortfolioName}
+              onChange={(e) => setNewPortfolioName(e.target.value)}
+              placeholder="方案名称"
+              autoFocus
+            />
+            <Button
+              type="primary"
+              onClick={() => {
+                if (newPortfolioName.trim()) {
+                  createPortfolio(newPortfolioName.trim(), 'dca');
+                  setCreatingPortfolio(false);
+                }
+              }}
+            >
+              创建
+            </Button>
+          </div>
+        )}
       </Modal>
+
+      <ConfirmModal
+        open={deleteTarget !== null}
+        title="删除定投"
+        description="确定要删除这条定投吗？此操作不可恢复。"
+        confirmText="删除"
+        danger
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmModal
+        open={portfolioDeleteOpen}
+        title="删除方案"
+        description="确定要删除当前方案吗？此操作不可恢复。"
+        confirmText="删除"
+        danger
+        onConfirm={() => {
+          deleteActivePortfolio('dca');
+          setPortfolioDeleteOpen(false);
+          setShowPortfolios(false);
+        }}
+        onCancel={() => setPortfolioDeleteOpen(false)}
+      />
 
       <ReceiptPreviewModal open={receiptOpen} onClose={() => setReceiptOpen(false)} />
       <SnapshotManageModal

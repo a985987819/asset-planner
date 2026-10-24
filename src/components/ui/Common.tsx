@@ -2,6 +2,8 @@
 // 通用 UI 组件
 // ============================================================
 
+import { Card, Title } from 'animal-island-ui';
+import type { CardColor } from 'animal-island-ui';
 import { PackageOpen } from 'lucide-react';
 
 interface EmptyStateProps {
@@ -34,14 +36,16 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, subtitle, action }: PageHeaderProps) {
   return (
-    <div className="flex items-center justify-between mb-5">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">{title}</h1>
-        {subtitle && (
-          <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>
-        )}
+    <div className="mb-5">
+      <div className="flex items-center justify-between gap-3">
+        <Title size="small" variant="ribbon">
+          {title}
+        </Title>
+        {action && <div className="flex-shrink-0">{action}</div>}
       </div>
-      {action && <div>{action}</div>}
+      {subtitle && (
+        <p className="mt-1.5 text-sm text-gray-500">{subtitle}</p>
+      )}
     </div>
   );
 }
@@ -54,21 +58,30 @@ interface StatCardProps {
   color?: 'default' | 'red' | 'green' | 'yellow';
 }
 
-export function StatCard({ label, value, sub, alert, color = 'default' }: StatCardProps) {
-  const colorClasses = {
-    default: 'bg-white',
-    red: 'bg-red-50 border-red-200',
-    green: 'bg-green-50 border-green-200',
-    yellow: 'bg-yellow-50 border-yellow-200',
-  };
+const COLOR_MAP: Record<NonNullable<StatCardProps['color']>, CardColor> = {
+  default: 'default',
+  red: 'app-red',
+  green: 'app-green',
+  yellow: 'app-yellow',
+};
 
-  const textColor = alert ? 'text-red-600' : 'text-gray-900';
+export function StatCard({ label, value, sub, alert, color = 'default' }: StatCardProps) {
+  // 库的彩色 Card 为实色底白字，default 为羊皮纸底棕字
+  const isTinted = color !== 'default';
 
   return (
-    <div className={`card ${colorClasses[color]} ${alert ? 'border-red-200' : ''}`}>
-      <div className="text-xs text-gray-500 mb-1">{label}</div>
-      <div className={`text-lg font-bold ${textColor}`}>{value}</div>
-      {sub && <div className="text-xs text-gray-400 mt-1">{sub}</div>}
-    </div>
+    <Card color={COLOR_MAP[color]}>
+      <div className={`text-xs mb-1 ${isTinted ? 'text-white/80' : 'text-gray-500'}`}>
+        {label}
+      </div>
+      <div className={`text-lg font-bold ${isTinted ? 'text-white' : alert ? 'text-danger-600' : 'text-gray-900'}`}>
+        {value}
+      </div>
+      {sub && (
+        <div className={`text-xs mt-1 ${isTinted ? 'text-white/70' : 'text-gray-400'}`}>
+          {sub}
+        </div>
+      )}
+    </Card>
   );
 }

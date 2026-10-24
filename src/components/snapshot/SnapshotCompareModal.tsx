@@ -5,6 +5,7 @@
 
 import { useMemo, useState } from 'react';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Button } from 'animal-island-ui';
 import { Modal } from '@/components/ui/Modal';
 import { useCategories } from '@/hooks/useCategories';
 import { formatMoney, formatPercent } from '@/lib/calculations';
@@ -166,12 +167,13 @@ export function SnapshotCompareModal({
             比例对比
           </button>
         </div>
-        <button
+        <Button
+          type="text"
+          size="small"
           onClick={() => setDetailLevel(detailLevel === 'category' ? 'detail' : 'category')}
-          className="btn-ghost text-xs"
         >
           {detailLevel === 'category' ? '按明细' : '按品类'}
-        </button>
+        </Button>
       </div>
 
       {/* 对比表格 */}

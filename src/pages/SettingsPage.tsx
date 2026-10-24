@@ -14,6 +14,7 @@ import {
   KeyRound,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { Button, Input } from 'animal-island-ui';
 import { usePortfolioStore } from '@/stores/portfolioStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -23,8 +24,10 @@ import { buildDocument, importDocument } from '@/lib/dataDocument';
 import { migrateLegacyData } from '@/lib/dataMigration';
 import { useCategories } from '@/hooks/useCategories';
 import { PageHeader } from '@/components/ui/Common';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { CategoryManageModal } from '@/components/ui/CategoryManageModal';
 import { SnapshotManageModal } from '@/components/snapshot/SnapshotManageModal';
+import { showToast } from '@/stores/toastStore';
 
 export default function SettingsPage() {
   const settings = useSettingsStore();
@@ -52,6 +55,8 @@ export default function SettingsPage() {
   const [pin, setPin] = useState('');
   const [editingIdentity, setEditingIdentity] = useState(false);
   const [identityError, setIdentityError] = useState('');
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearIdentityOpen, setClearIdentityOpen] = useState(false);
 
   const checkCategoryInAssets = (categoryId: string): boolean => {
     const { basePortfolios, dcaPortfolios } = usePortfolioStore.getState();
@@ -84,7 +89,11 @@ export default function SettingsPage() {
     reader.onload = (loadEvent) => {
       const json = loadEvent.target?.result as string;
       const success = importDocument(json);
-      alert(success ? '数据导入成功' : '导入失败：文件格式不正确');
+      if (success) {
+        showToast('数据导入成功');
+      } else {
+        showToast('导入失败：文件格式不正确', 'error');
+      }
     };
     reader.readAsText(file);
     event.target.value = '';
@@ -136,15 +145,13 @@ export default function SettingsPage() {
   };
 
   const handleClearIdentity = () => {
-    if (window.confirm('确定清除身份吗？清除后本设备将不再同步云端数据，个人数据仅在输入相应密码后可见。')) {
-      clearSyncIdentity();
-      setPin('');
-      setEditingIdentity(false);
-      deactivateSync();
-      // 重载到无身份命名空间（干净默认，不再读取个人数据）
-      useSettingsStore.getState().reloadFromStorage();
-      usePortfolioStore.getState().reloadFromStorage();
-    }
+    clearSyncIdentity();
+    setPin('');
+    setEditingIdentity(false);
+    deactivateSync();
+    // 重载到无身份命名空间（干净默认，不再读取个人数据）
+    useSettingsStore.getState().reloadFromStorage();
+    usePortfolioStore.getState().reloadFromStorage();
   };
 
   const syncStatusDisplay = () => {
@@ -198,8 +205,7 @@ export default function SettingsPage() {
         <div className="space-y-3">
           <div>
             <label className="label">月薪 (元)</label>
-            <input
-              className="input"
+            <Input
               type="number"
               min="0"
               step="100"
@@ -211,8 +217,7 @@ export default function SettingsPage() {
           <div>
             <label className="label">定投比例上限 (%)</label>
             <div className="flex items-center gap-3">
-              <input
-                className="input"
+              <Input
                 type="number"
                 min="1"
                 max="100"
@@ -231,16 +236,17 @@ export default function SettingsPage() {
       <div className="card mb-4">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-medium text-gray-700">品类管理</h3>
-          <button
+          <Button
+            type="text"
+            size="small"
+            icon={<Plus size={14} />}
             onClick={() => {
               setEditingCategory(null);
               setCategoryModalOpen(true);
             }}
-            className="btn-ghost text-xs"
           >
-            <Plus size={14} />
             添加
-          </button>
+          </Button>
         </div>
 
         {deleteError && <div className="mb-2 rounded-lg bg-red-50 p-2 text-xs text-red-500">{deleteError}</div>}
@@ -251,7 +257,12 @@ export default function SettingsPage() {
               <div className="h-3 w-3 flex-shrink-0 rounded-full" style={{ backgroundColor: category.color }} />
               <span className="flex-1 text-sm text-gray-700">{category.name}</span>
               {category.isBuiltin && <span className="text-xs text-gray-400">内置</span>}
-              <button
+              <Button
+                type="text"
+                size="small"
+                title="编辑"
+                aria-label="编辑"
+                icon={<Pencil size={13} />}
                 onClick={() => {
                   setEditingCategory({
                     id: category.id,
@@ -260,75 +271,66 @@ export default function SettingsPage() {
                   });
                   setCategoryModalOpen(true);
                 }}
-                className="rounded p-1 text-gray-400 hover:bg-gray-200"
-                title="编辑"
-              >
-                <Pencil size={13} />
-              </button>
+              />
               {!category.isBuiltin && (
-                <button
-                  onClick={() => handleCategoryDelete(category.id)}
-                  className="rounded p-1 text-gray-400 hover:bg-red-100 hover:text-red-500"
+                <Button
+                  type="text"
+                  size="small"
                   title="删除"
-                >
-                  <Trash2 size={13} />
-                </button>
+                  aria-label="删除"
+                  danger
+                  icon={<Trash2 size={13} />}
+                  onClick={() => handleCategoryDelete(category.id)}
+                />
               )}
             </div>
           ))}
         </div>
 
-        <button onClick={() => navigate('/watchlist')} className="btn-secondary mt-3 w-full justify-between">
+        <Button onClick={() => navigate('/watchlist')} block className="mt-3 justify-between">
           <span className="flex items-center gap-2">
             <Star size={16} />
             自选管理
           </span>
           <span className="text-xs text-gray-400">{settings.watchlist.length} 条</span>
-        </button>
+        </Button>
       </div>
 
       <div className="card mb-4">
         <h3 className="mb-3 text-sm font-medium text-gray-700">数据管理</h3>
         <div className="space-y-2">
-          <button onClick={() => setSnapshotModalOpen(true)} className="btn-secondary w-full justify-between">
+          <Button onClick={() => setSnapshotModalOpen(true)} block className="justify-between">
             <span className="flex items-center gap-2">
               <History size={16} />
               历史记录
             </span>
             <span className="text-xs text-gray-400">{snapshots.length} 条记录</span>
-          </button>
+          </Button>
 
-          <button onClick={handleExport} className="btn-secondary w-full justify-between">
+          <Button onClick={handleExport} block className="justify-between">
             <span className="flex items-center gap-2">
-              {exported ? <Check size={16} className="text-green-500" /> : <Download size={16} />}
+              {exported ? <Check size={16} className="text-success-500" /> : <Download size={16} />}
               {exported ? '已导出' : '导出 JSON'}
             </span>
             <span className="text-xs text-gray-400">备份到本地</span>
-          </button>
+          </Button>
 
-          <button onClick={handleImport} className="btn-secondary w-full justify-between">
+          <Button onClick={handleImport} block className="justify-between">
             <span className="flex items-center gap-2">
               <Upload size={16} />
               导入 JSON
             </span>
             <span className="text-xs text-gray-400">恢复备份</span>
-          </button>
+          </Button>
           <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleFileChange} />
 
-          <button
-            onClick={() => {
-              if (window.confirm('确定要清空所有数据吗？此操作不可恢复。')) {
-                clearAll();
-              }
-            }}
-            className="btn-secondary w-full justify-between !text-red-500 hover:!bg-red-50"
-          >
+          <Button onClick={() => setClearOpen(true)} block danger className="justify-between">
             <span className="flex items-center gap-2">
               <Trash2 size={16} />
               清空所有数据
             </span>
             <span className="text-xs">不可恢复</span>
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -343,28 +345,29 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-400">
               输入一个只有你知道的密码作为数据钥匙。不同密码对应不同的云端数据，互相隔离。请用足够强的密码，别告诉别人。
             </p>
-            <input
+            <Input
               type="password"
-              className="input"
               value={pin}
               onChange={(e) => setPin(e.target.value)}
               placeholder="输入密码（至少 4 位）"
             />
             {identityError && <div className="text-xs text-red-500">{identityError}</div>}
-            <button onClick={handleSetIdentity} className="btn-primary w-full text-sm">
+            <Button onClick={handleSetIdentity} type="primary" block size="small">
               {hasIdentity() ? '切换身份' : '启用同步'}
-            </button>
+            </Button>
             {hasIdentity() && (
-              <button
+              <Button
+                type="text"
+                size="small"
+                block
                 onClick={() => {
                   setEditingIdentity(false);
                   setPin('');
                   setIdentityError('');
                 }}
-                className="btn-ghost w-full text-xs"
               >
                 取消
-              </button>
+              </Button>
             )}
           </div>
         ) : (
@@ -379,12 +382,12 @@ export default function SettingsPage() {
               </span>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setEditingIdentity(true)} className="btn-secondary flex-1 text-sm">
-                <Pencil size={14} /> 修改身份
-              </button>
-              <button onClick={handleClearIdentity} className="btn-secondary flex-1 text-sm !text-red-500 hover:!bg-red-50">
-                <Trash2 size={14} /> 清除身份
-              </button>
+              <Button onClick={() => setEditingIdentity(true)} block size="small" icon={<Pencil size={14} />}>
+                修改身份
+              </Button>
+              <Button onClick={() => setClearIdentityOpen(true)} block danger size="small" icon={<Trash2 size={14} />}>
+                清除身份
+              </Button>
             </div>
           </div>
         )}
@@ -408,16 +411,49 @@ export default function SettingsPage() {
             数据自动同步：任何修改自动上传，打开或切回页面时自动拉取，多台设备实时同步。
           </p>
           <div className="flex gap-2">
-            <button onClick={() => pullNow()} disabled={syncStatus === 'syncing'} className="btn-primary flex-1 text-sm">
-              <RefreshCw size={16} className={syncStatus === 'syncing' ? 'animate-spin' : ''} />
+            <Button
+              onClick={() => pullNow()}
+              disabled={syncStatus === 'syncing'}
+              loading={syncStatus === 'syncing'}
+              type="primary"
+              size="small"
+              block
+              icon={<RefreshCw size={16} className={syncStatus === 'syncing' ? 'animate-spin' : ''} />}
+            >
               {syncStatus === 'syncing' ? '同步中...' : '立即同步'}
-            </button>
-            <button onClick={() => pushNow()} disabled={syncStatus === 'syncing'} className="btn-secondary text-sm">
-              <Cloud size={16} /> 上传
-            </button>
+            </Button>
+            <Button onClick={() => pushNow()} disabled={syncStatus === 'syncing'} size="small" icon={<Cloud size={16} />}>
+              上传
+            </Button>
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        open={clearOpen}
+        title="清空所有数据"
+        description="确定要清空所有数据吗？底仓、定投、快照、自选和设置都会被重置，此操作不可恢复。建议先导出 JSON 备份。"
+        confirmText="清空"
+        danger
+        onConfirm={() => {
+          clearAll();
+          setClearOpen(false);
+        }}
+        onCancel={() => setClearOpen(false)}
+      />
+
+      <ConfirmModal
+        open={clearIdentityOpen}
+        title="清除身份"
+        description="确定清除身份吗？清除后本设备将不再同步云端数据，个人数据仅在输入相应密码后可见。"
+        confirmText="清除"
+        danger
+        onConfirm={() => {
+          handleClearIdentity();
+          setClearIdentityOpen(false);
+        }}
+        onCancel={() => setClearIdentityOpen(false)}
+      />
 
       <SnapshotManageModal
         open={snapshotModalOpen}

@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Trash2, Eye, GitCompare, Copy, TrendingUp } from 'lucide-react';
+import { Button, Checkbox } from 'animal-island-ui';
 import type { Snapshot } from '@/types';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { formatMoney } from '@/lib/calculations';
 import { ReceiptPreviewModal } from './ReceiptPreviewModal';
 import { SnapshotCompareModal } from './SnapshotCompareModal';
@@ -28,6 +30,8 @@ export function SnapshotManageModal({
   const [receiptSnapshot, setReceiptSnapshot] = useState<Snapshot | null>(null);
   const [compareSelected, setCompareSelected] = useState<string[]>([]);
   const [compareSnapshots, setCompareSnapshots] = useState<Snapshot[]>([]);
+  const [restoreTarget, setRestoreTarget] = useState<Snapshot | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Snapshot | null>(null);
 
   const groupedSnapshots = useMemo(() => {
     const map = new Map<string, Snapshot[]>();
@@ -69,13 +73,15 @@ export function SnapshotManageModal({
           <>
             {sortedSelected.length >= 2 && (
               <div className="mb-3">
-                <button
+                <Button
+                  type="primary"
+                  size="small"
+                  block
+                  icon={<GitCompare size={16} />}
                   onClick={() => setCompareSnapshots(sortedSelected)}
-                  className="btn-primary w-full text-sm"
                 >
-                  <GitCompare size={16} />
                   对比选中的 {sortedSelected.length} 条记录
-                </button>
+                </Button>
               </div>
             )}
             {sortedSelected.length === 1 && (
@@ -111,9 +117,10 @@ export function SnapshotManageModal({
                               : 'border-gray-100 bg-gray-50'
                           }`}
                         >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
+                          <Checkbox
+                            size="small"
+                            options={[{ label: '', value: snapshot.id }]}
+                            value={isSelected ? [snapshot.id] : []}
                             onChange={() => {
                               setCompareSelected((prevIds) =>
                                 prevIds.includes(snapshot.id)
@@ -121,7 +128,6 @@ export function SnapshotManageModal({
                                   : [...prevIds, snapshot.id]
                               );
                             }}
-                            className="h-4 w-4 flex-shrink-0 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                           />
 
                           <div className="min-w-0 flex-1">
@@ -138,46 +144,40 @@ export function SnapshotManageModal({
 
                           <div className="ml-1 flex gap-1">
                             {prev && (
-                              <button
-                                onClick={() => setCompareSnapshots([prev, snapshot])}
-                                className="rounded-lg p-1.5 text-gray-400 hover:bg-primary-100 hover:text-primary-600"
+                              <Button
+                                type="text"
+                                size="small"
                                 title="与上一期对比"
-                              >
-                                <TrendingUp size={14} />
-                              </button>
+                                aria-label="与上一期对比"
+                                icon={<TrendingUp size={14} />}
+                                onClick={() => setCompareSnapshots([prev, snapshot])}
+                              />
                             )}
-                            <button
-                              onClick={() => setReceiptSnapshot(snapshot)}
-                              className="rounded-lg p-1.5 text-gray-400 hover:bg-primary-100 hover:text-primary-600"
+                            <Button
+                              type="text"
+                              size="small"
                               title="查看小票"
-                            >
-                              <Eye size={14} />
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (window.confirm('确定要以此为基准编辑吗？当前数据将被覆盖。')) {
-                                  restoreSnapshot(snapshot.id);
-                                  onClose();
-                                  setCompareSelected([]);
-                                }
-                              }}
-                              className="rounded-lg p-1.5 text-gray-400 hover:bg-primary-100 hover:text-primary-600"
+                              aria-label="查看小票"
+                              icon={<Eye size={14} />}
+                              onClick={() => setReceiptSnapshot(snapshot)}
+                            />
+                            <Button
+                              type="text"
+                              size="small"
                               title="以此为基准编辑"
-                            >
-                              <Copy size={14} />
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (window.confirm('确定要删除这条历史记录吗？')) {
-                                  removeSnapshot(snapshot.id);
-                                  setCompareSelected((prevIds) => prevIds.filter((id) => id !== snapshot.id));
-                                }
-                              }}
-                              className="rounded-lg p-1.5 text-gray-400 hover:bg-red-100 hover:text-red-500"
+                              aria-label="以此为基准编辑"
+                              icon={<Copy size={14} />}
+                              onClick={() => setRestoreTarget(snapshot)}
+                            />
+                            <Button
+                              type="text"
+                              size="small"
                               title="删除"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                              aria-label="删除"
+                              danger
+                              icon={<Trash2 size={14} />}
+                              onClick={() => setDeleteTarget(snapshot)}
+                            />
                           </div>
                         </div>
                       );
@@ -194,6 +194,38 @@ export function SnapshotManageModal({
         open={Boolean(receiptSnapshot)}
         onClose={() => setReceiptSnapshot(null)}
         snapshot={receiptSnapshot}
+      />
+
+      <ConfirmModal
+        open={restoreTarget !== null}
+        title="以此为基准编辑"
+        description={`确定要以「${restoreTarget?.label ?? '该记录'}」为基准编辑吗？当前底仓和定投数据将被覆盖。`}
+        confirmText="覆盖并编辑"
+        onConfirm={() => {
+          if (restoreTarget) {
+            restoreSnapshot(restoreTarget.id);
+            onClose();
+            setCompareSelected([]);
+          }
+          setRestoreTarget(null);
+        }}
+        onCancel={() => setRestoreTarget(null)}
+      />
+
+      <ConfirmModal
+        open={deleteTarget !== null}
+        title="删除历史记录"
+        description="确定要删除这条历史记录吗？此操作不可恢复。"
+        confirmText="删除"
+        danger
+        onConfirm={() => {
+          if (deleteTarget) {
+            removeSnapshot(deleteTarget.id);
+            setCompareSelected((prevIds) => prevIds.filter((id) => id !== deleteTarget.id));
+          }
+          setDeleteTarget(null);
+        }}
+        onCancel={() => setDeleteTarget(null)}
       />
 
       {compareSnapshots.length >= 2 && (

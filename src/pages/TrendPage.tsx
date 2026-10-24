@@ -16,6 +16,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { TrendingUp, Save, GitCompare, RotateCcw } from 'lucide-react';
+import { Button, Select } from 'animal-island-ui';
 import { usePortfolioStore } from '@/stores/portfolioStore';
 import { useCategories } from '@/hooks/useCategories';
 import {
@@ -224,10 +225,9 @@ export default function TrendPage() {
           title="至少需要 2 期记录"
           description="每 3/6 个月回来更新一次资产，保存今日记录后即可对比总资产、各部分与占比的变化。"
           action={
-            <button onClick={createDailySnapshot} className="btn-primary">
-              <Save size={16} />
+            <Button type="primary" size="small" icon={<Save size={16} />} onClick={createDailySnapshot}>
               保存今日记录
-            </button>
+            </Button>
           }
         />
       </div>
@@ -258,13 +258,13 @@ export default function TrendPage() {
                 {formatMoney(prevTotal)} → {formatMoney(latestTotal)}
               </div>
             </div>
-            <button
+            <Button
               onClick={() => setCompareSnapshots([prev, latest])}
-              className="btn-secondary flex-shrink-0 text-sm"
+              size="small"
+              icon={<GitCompare size={16} />}
             >
-              <GitCompare size={16} />
               查看明细对比
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -454,17 +454,14 @@ export default function TrendPage() {
 
         {sankeyMode === 'single' ? (
           <>
-            <select
+            <Select
+              options={sorted.map((s) => ({
+                key: s.id,
+                label: `${s.label} · ${new Date(s.createdAt).toLocaleDateString('zh-CN')}`,
+              }))}
               value={singleSnapshot.id}
-              onChange={(e) => setSankeySingleId(e.target.value)}
-              className="select text-xs"
-            >
-              {sorted.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label} · {new Date(s.createdAt).toLocaleDateString('zh-CN')}
-                </option>
-              ))}
-            </select>
+              onChange={(key) => setSankeySingleId(key)}
+            />
             <div className="mt-3">
               <SankeyChart
                 data={singleSankey}
@@ -476,29 +473,27 @@ export default function TrendPage() {
         ) : (
           <>
             <div className="flex items-center gap-2">
-              <select
-                value={startSnapshot.id}
-                onChange={(e) => setSankeyStartId(e.target.value)}
-                className="select flex-1 text-xs"
-              >
-                {sorted.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label} · {new Date(s.createdAt).toLocaleDateString('zh-CN')}
-                  </option>
-                ))}
-              </select>
+              <div className="min-w-0 flex-1">
+                <Select
+                  options={sorted.map((s) => ({
+                    key: s.id,
+                    label: `${s.label} · ${new Date(s.createdAt).toLocaleDateString('zh-CN')}`,
+                  }))}
+                  value={startSnapshot.id}
+                  onChange={(key) => setSankeyStartId(key)}
+                />
+              </div>
               <span className="text-lg text-gray-300">→</span>
-              <select
-                value={endSnapshot.id}
-                onChange={(e) => setSankeyEndId(e.target.value)}
-                className="select flex-1 text-xs"
-              >
-                {sorted.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label} · {new Date(s.createdAt).toLocaleDateString('zh-CN')}
-                  </option>
-                ))}
-              </select>
+              <div className="min-w-0 flex-1">
+                <Select
+                  options={sorted.map((s) => ({
+                    key: s.id,
+                    label: `${s.label} · ${new Date(s.createdAt).toLocaleDateString('zh-CN')}`,
+                  }))}
+                  value={endSnapshot.id}
+                  onChange={(key) => setSankeyEndId(key)}
+                />
+              </div>
             </div>
             {startSnapshot.id === endSnapshot.id && (
               <div className="mt-2 text-xs text-amber-600">请选择两个不同日期</div>
@@ -552,13 +547,16 @@ export default function TrendPage() {
             );
           })}
           {hiddenCats.size > 0 && (
-            <button
+            <Button
+              type="text"
+              size="small"
+              block
+              className="mt-1"
+              icon={<RotateCcw size={12} />}
               onClick={() => setHiddenCats(new Set())}
-              className="btn-ghost mt-1 flex w-full items-center justify-center gap-1 text-xs text-gray-500"
             >
-              <RotateCcw size={12} />
               重置排除（恢复全部统计）
-            </button>
+            </Button>
           )}
         </div>
       </div>

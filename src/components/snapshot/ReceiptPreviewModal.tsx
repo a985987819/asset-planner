@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Download, Save } from 'lucide-react';
+import { Button } from 'animal-island-ui';
 import html2canvas from 'html2canvas';
 import { Modal } from '@/components/ui/Modal';
 import { ReceiptCard } from './ReceiptCard';
@@ -98,19 +99,19 @@ export function ReceiptPreviewModal({ open, onClose, snapshot }: ReceiptPreviewM
         </div>
 
         <div className="flex w-full gap-3">
-          <button onClick={handleDownload} disabled={capturing} className="btn-primary flex-1">
-            <Download size={16} />
+          <Button type="primary" size="small" block loading={capturing} disabled={capturing} icon={<Download size={16} />} onClick={handleDownload}>
             {capturing ? '生成中...' : '保存图片'}
-          </button>
+          </Button>
           {!isReadonly && (
-            <button
-              onClick={handleSaveSnapshot}
+            <Button
+              size="small"
+              block
               disabled={capturing || saved}
-              className={`btn-secondary flex-1 ${saved ? '!bg-green-50 !text-green-600' : ''}`}
+              icon={<Save size={16} />}
+              onClick={handleSaveSnapshot}
             >
-              <Save size={16} />
               {saved ? '已保存' : '保存今日'}
-            </button>
+            </Button>
           )}
         </div>
 

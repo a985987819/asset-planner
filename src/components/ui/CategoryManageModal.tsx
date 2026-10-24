@@ -2,7 +2,8 @@
 // 品类管理弹窗
 // ============================================================
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Button, Input } from 'animal-island-ui';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { CATEGORY_PRESET_COLORS } from '@/types';
 import { Modal } from '@/components/ui/Modal';
@@ -27,6 +28,15 @@ export function CategoryManageModal({
   const [name, setName] = useState(initialName);
   const [color, setColor] = useState(initialColor);
   const [error, setError] = useState('');
+
+  // 组件在设置页常驻挂载：每次打开时同步 props 到表单（修复编辑第二个品类时显示旧值的问题）
+  useEffect(() => {
+    if (open) {
+      setName(initialName);
+      setColor(initialColor);
+      setError('');
+    }
+  }, [open, initialName, initialColor]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,8 +79,7 @@ export function CategoryManageModal({
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="label">名称</label>
-          <input
-            className="input"
+          <Input
             value={name}
             onChange={(e) => {
               setName(e.target.value);
@@ -110,8 +119,9 @@ export function CategoryManageModal({
               onChange={(e) => setColor(e.target.value)}
               className="w-8 h-8 rounded cursor-pointer border-0 p-0"
             />
-            <input
-              className="input w-24 text-xs"
+            <Input
+              className="w-28"
+              size="small"
               value={color}
               onChange={(e) => setColor(e.target.value)}
               placeholder="#000000"
@@ -119,9 +129,9 @@ export function CategoryManageModal({
           </div>
         </div>
 
-        <button type="submit" className="btn-primary w-full">
+        <Button htmlType="submit" type="primary" block>
           {editingId ? '保存' : '添加'}
-        </button>
+        </Button>
       </form>
     </Modal>
   );

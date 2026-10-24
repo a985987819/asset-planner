@@ -1,9 +1,19 @@
 // ============================================================
-// 通用弹窗组件 (v3 — 支持可配置最大高度)
+// 通用弹窗 — 封装 animal-island-ui 的 Modal（blob 异形外观）
+// 保持项目原有调用 API：open / onClose / title / children / maxWidth
 // ============================================================
 
-import { useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
+import { Modal as AnimalModal, Button } from 'animal-island-ui';
+import { CloseIcon } from 'naive-icons';
+
+/** 沿用旧版 Tailwind max-w-* 入参，映射为库需要的像素宽度 */
+const WIDTH_MAP: Record<string, number> = {
+  'max-w-sm': 384,
+  'max-w-md': 448,
+  'max-w-lg': 512,
+  'max-w-xl': 576,
+  'max-w-2xl': 672,
+};
 
 interface ModalProps {
   open: boolean;
@@ -11,6 +21,7 @@ interface ModalProps {
   title: string;
   children: React.ReactNode;
   maxWidth?: string;
+  /** 兼容旧入参：滚动与视口高度限制已由库内 Modal 处理 */
   maxHeight?: string;
   /** 点击遮罩是否关闭，默认 true */
   closeOnOverlay?: boolean;
@@ -22,58 +33,30 @@ export function Modal({
   title,
   children,
   maxWidth = 'max-w-md',
-  maxHeight = 'max-h-[92vh]',
   closeOnOverlay = true,
 }: ModalProps) {
-  const overlayRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [open]);
-
-  useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    if (open) window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   return (
-    <div
-      ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40"
-      onClick={(e) => {
-        if (closeOnOverlay && e.target === overlayRef.current) onClose();
-      }}
-    >
-      <div
-        className={`bg-white rounded-t-xl sm:rounded-xl shadow-xl w-full ${maxWidth} ${maxHeight} overflow-y-auto`}
-        style={{
-          animation: 'modalIn 0.2s ease-out',
-          maxHeight: '92vh',
-        }}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
-          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-          <button
+    <AnimalModal
+      open={open}
+      onClose={onClose}
+      width={WIDTH_MAP[maxWidth] ?? 448}
+      maskClosable={closeOnOverlay}
+      footer={null}
+      title={
+        <div className="flex w-full items-center justify-between gap-2">
+          <span>{title}</span>
+          <Button
+            type="text"
+            size="small"
+            aria-label="关闭"
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-          >
-            <X size={20} />
-          </button>
+            icon={<CloseIcon size={16} />}
+          />
         </div>
-        <div className="p-5">{children}</div>
-      </div>
-    </div>
+      }
+    >
+      {/* 库内 body 是 flex + align-start 且字号偏大，用 w-full 容器恢复常规文档流排版 */}
+      <div className="w-full text-sm font-normal leading-relaxed">{children}</div>
+    </AnimalModal>
   );
 }

@@ -16,6 +16,7 @@ tsconfig.tsbuildinfo
 *.swp
 *.swo
 .workbuddy/
+.reasonix/
 
 # OS
 .DS_Store

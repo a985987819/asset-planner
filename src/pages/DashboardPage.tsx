@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { TrendingUp, PiggyBank, History, Save, RotateCcw } from 'lucide-react';
+import { Button } from 'animal-island-ui';
 import { usePortfolioStore } from '@/stores/portfolioStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import {
@@ -15,6 +16,7 @@ import {
 import { useCategories } from '@/hooks/useCategories';
 import { CustomPieTooltip } from '@/components/charts/CustomPieTooltip';
 import { PageHeader, StatCard, EmptyState } from '@/components/ui/Common';
+import { showToast } from '@/stores/toastStore';
 import { SnapshotManageModal } from '@/components/snapshot/SnapshotManageModal';
 
 /** 基于可见品类重新聚合占比（隐藏的品类不参与统计，剩余项重新归一化到 100%） */
@@ -143,14 +145,21 @@ export default function DashboardPage() {
       </div>
 
       <div id="dashboard-snapshot-actions" className="mb-4 flex gap-2">
-        <button onClick={createDailySnapshot} className="btn-primary flex-1 text-sm">
-          <Save size={16} />
+        <Button
+          type="primary"
+          block
+          size="small"
+          icon={<Save size={16} />}
+          onClick={() => {
+            createDailySnapshot();
+            showToast('今日记录已保存');
+          }}
+        >
           保存今日记录
-        </button>
-        <button onClick={() => setHistoryOpen(true)} className="btn-secondary flex-1 text-sm">
-          <History size={16} />
+        </Button>
+        <Button block size="small" icon={<History size={16} />} onClick={() => setHistoryOpen(true)}>
           查看历史对比
-        </button>
+        </Button>
       </div>
 
       {baseAssets.length > 0 && (
@@ -212,18 +221,22 @@ export default function DashboardPage() {
                 );
               })}
               {hiddenBase.size > 0 && (
-                <button
+                <Button
+                  type="text"
+                  size="small"
+                  block
+                  className="mt-1"
+                  icon={<RotateCcw size={12} />}
                   onClick={() => setHiddenBase(new Set())}
-                  className="btn-ghost mt-1 flex w-full items-center justify-center gap-1 text-xs text-gray-500"
                 >
-                  <RotateCcw size={12} />
                   重置排除（恢复全部统计）
-                </button>
+                </Button>
               )}
             </div>
           </div>
         </div>
       )}
+
 
       {dcaAssets.length > 0 && (
         <div id="dashboard-dca-chart" className="card">
@@ -284,13 +297,16 @@ export default function DashboardPage() {
                 );
               })}
               {hiddenDca.size > 0 && (
-                <button
+                <Button
+                  type="text"
+                  size="small"
+                  block
+                  className="mt-1"
+                  icon={<RotateCcw size={12} />}
                   onClick={() => setHiddenDca(new Set())}
-                  className="btn-ghost mt-1 flex w-full items-center justify-center gap-1 text-xs text-gray-500"
                 >
-                  <RotateCcw size={12} />
                   重置排除（恢复全部统计）
-                </button>
+                </Button>
               )}
             </div>
           </div>

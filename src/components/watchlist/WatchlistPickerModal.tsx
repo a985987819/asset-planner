@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Search, Check } from 'lucide-react';
+import { Button, Input } from 'animal-island-ui';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useCategories } from '@/hooks/useCategories';
 import type { WatchlistItem } from '@/types';
@@ -118,10 +119,10 @@ export function WatchlistPickerModal({
             </div>
           </div>
 
-          <div className="relative mb-3">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              className="input pl-9"
+          <div className="mb-3">
+            <Input
+              size="small"
+              prefix={<Search size={14} className="text-gray-400" />}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="搜索代码、名称或备注..."
@@ -168,13 +169,13 @@ export function WatchlistPickerModal({
 
                     <div className="mt-3 flex items-start gap-2">
                       <div className="flex-1">
-                        <input
-                          className={`input w-full text-right ${
-                            hasError ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''
-                          }`}
+                        <Input
+                          className="w-full text-right"
+                          size="small"
                           type="number"
                           min="0"
                           step="0.01"
+                          status={hasError ? 'error' : undefined}
                           value={amounts[item.id] ?? ''}
                           onChange={(event) => {
                             setAmounts({ ...amounts, [item.id]: event.target.value });
@@ -187,9 +188,9 @@ export function WatchlistPickerModal({
                         />
                         {hasError && <div className="mt-1 text-xs text-red-500">请输入大于 0 的金额</div>}
                       </div>
-                      <button onClick={() => handleQuickAdd(item)} className="btn-primary px-3 py-1.5 text-xs">
+                      <Button type="primary" size="small" onClick={() => handleQuickAdd(item)}>
                         添加
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 );
@@ -200,20 +201,23 @@ export function WatchlistPickerModal({
       )}
 
       {filledEntries.length > 0 && (
-        <button onClick={handleBatchComplete} className="btn-primary mt-3 w-full">
-          <Check size={16} /> 批量完成（{filledEntries.length} 项）
-        </button>
+        <Button type="primary" size="small" block className="mt-3" icon={<Check size={16} />} onClick={handleBatchComplete}>
+          批量完成（{filledEntries.length} 项）
+        </Button>
       )}
 
-      <button
+      <Button
+        type="text"
+        size="small"
+        block
+        className="mt-4 rounded-none border-t border-gray-200"
         onClick={() => {
           onManualInput();
           onClose();
         }}
-        className="mt-4 w-full border-t border-gray-100 py-2 pt-3 text-sm text-gray-400 hover:text-gray-600"
       >
         手动输入（含品类选择）
-      </button>
+      </Button>
     </Modal>
   );
 }
