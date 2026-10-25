@@ -3,10 +3,12 @@
 // ============================================================
 
 import { isSyncEnabled, fetchCloudDocument, saveCloudDocument, subscribeToCloudChanges } from '@/lib/supabase';
-import { buildDocument, applyDocument, documentFingerprint, isPristine } from '@/lib/dataDocument';
+import { buildDocument, applyDocument, documentFingerprint, isPristine, type CloudDocument } from '@/lib/dataDocument';
 import { getSyncUserId } from '@/lib/syncIdentity';
+import { storageKey } from '@/lib/syncIdentity';
 import { usePortfolioStore } from '@/stores/portfolioStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { showToast } from '@/stores/toastStore';
 import type { SyncStatus } from '@/types';
 
 // 记录本设备最后一次推送到云端的状态，用于回声识别与增量比较
@@ -57,6 +59,43 @@ function saveSyncState(at: string, fp: string): void {
   } catch {
     // storage full or unavailable
   }
+}
+
+// ---- 冲突备份：本地覆盖云端前，把云端版本存入本地，保证不丢数据 ----
+export interface ConflictBackup {
+  savedAt: string;        // 备份产生时间
+  cloudUpdatedAt: string; // 云端版本的最后更新时间
+  doc: CloudDocument;
+}
+
+const CONFLICT_BACKUP_BASE = 'asset-planner-conflict-backup';
+
+function backupKey(): string {
+  return storageKey(CONFLICT_BACKUP_BASE);
+}
+
+function stashConflictBackup(doc: CloudDocument, cloudUpdatedAt: string): void {
+  try {
+    const backup: ConflictBackup = { savedAt: new Date().toISOString(), cloudUpdatedAt, doc };
+    localStorage.setItem(backupKey(), JSON.stringify(backup));
+  } catch {
+    // storage 满 — 尽力而为，不阻塞同步
+  }
+}
+
+/** 读取被本设备覆盖的云端版本备份（设置页展示/恢复用） */
+export function getConflictBackup(): ConflictBackup | null {
+  try {
+    const raw = localStorage.getItem(backupKey());
+    return raw ? (JSON.parse(raw) as ConflictBackup) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 清除冲突备份（用户已处理或放弃恢复） */
+export function clearConflictBackup(): void {
+  localStorage.removeItem(backupKey());
 }
 
 // 把当前本地状态整份推送到云端
@@ -135,8 +174,17 @@ export async function pullNow(): Promise<boolean> {
           return true;
         }
 
-        // 本地还有未推送的修改 → 本地优先
+        // 本地还有未推送的修改 → 本地优先。
+        // 若云端也更新过（另一设备的修改），是真实冲突：覆盖前备份云端版本并提示，
+        // 避免静默丢失另一端的数据。
         if (documentFingerprint(local) !== lastPushedFingerprint) {
+          if (remote.updatedAt > lastPushedAt) {
+            stashConflictBackup(remote.data, remote.updatedAt);
+            showToast(
+              '检测到其他设备也有新修改，已按本设备数据为准；被覆盖的云端版本已自动备份，可在「设置 → 数据管理」恢复',
+              'info'
+            );
+          }
           await pushNow();
           return true;
         }

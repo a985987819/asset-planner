@@ -5,7 +5,7 @@
 
 import { useMemo, useState } from 'react';
 import {
-  LineChart,
+  ComposedChart,
   Line,
   AreaChart,
   Area,
@@ -18,7 +18,9 @@ import {
 import { TrendingUp, Save, GitCompare, RotateCcw } from 'lucide-react';
 import { Button, Select } from 'animal-island-ui';
 import { usePortfolioStore } from '@/stores/portfolioStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { useCategories } from '@/hooks/useCategories';
+import { formatInterval, toggleInSet, buildCategoryMap } from '@/lib/snapshotUtils';
 import {
   calcBaseTotal,
   calcMonthlyDCATotal,
@@ -58,23 +60,10 @@ function TrendTooltip({ active, payload, label, getLabel, formatValue }: TrendTo
   );
 }
 
-function formatInterval(a: string, b: string): string {
-  const days = Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
-  if (days < 1) return '同日';
-  if (days < 30) return `${days} 天`;
-  return `${days} 天（约 ${Math.round(days / 30)} 个月）`;
-}
-
-function toggleInSet(value: string, set: Set<string>, setter: (s: Set<string>) => void) {
-  const next = new Set(set);
-  if (next.has(value)) next.delete(value);
-  else next.add(value);
-  setter(next);
-}
-
 export default function TrendPage() {
   const snapshots = usePortfolioStore((s) => s.snapshots);
   const createDailySnapshot = usePortfolioStore((s) => s.createDailySnapshot);
+  const tradingDays = useSettingsStore((s) => s.monthlyTradingDays);
   const { categories, getLabel, getColor } = useCategories();
 
   const [hiddenCats, setHiddenCats] = useState<Set<string>>(new Set());
@@ -94,6 +83,10 @@ export default function TrendPage() {
     [snapshots]
   );
 
+  // 数据跨年时 X 轴标签带年份，避免每年同月日重名
+  const multiYear =
+    new Set(sorted.map((s) => new Date(s.createdAt).getFullYear())).size > 1;
+
   // 每个快照的底仓总额 / 月定投 / 品类聚合
   const perSnapshot = useMemo(
     () =>
@@ -103,13 +96,18 @@ export default function TrendPage() {
         const byCat = new Map<string, number>();
         for (const a of base) byCat.set(a.category, (byCat.get(a.category) ?? 0) + a.amount);
         return {
-          time: new Date(s.createdAt).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }),
+          time: new Date(s.createdAt).toLocaleDateString(
+            'zh-CN',
+            multiYear
+              ? { year: 'numeric', month: 'numeric', day: 'numeric' }
+              : { month: 'numeric', day: 'numeric' }
+          ),
           baseTotal: calcBaseTotal(base),
-          dcaMonthly: calcMonthlyDCATotal(dca),
+          dcaMonthly: calcMonthlyDCATotal(dca, tradingDays),
           byCat,
         };
       }),
-    [sorted]
+    [sorted, multiYear, tradingDays]
   );
 
   // 所有快照中出现过的品类并集
@@ -187,15 +185,7 @@ export default function TrendPage() {
   }, [sorted]);
 
   // 桑基图：品类名/颜色取快照自身设置，未知品类回退当前设置
-  const catMap = useMemo(() => {
-    const map = new Map<string, { name: string; color: string }>();
-    for (const s of snapshots) {
-      for (const c of s.snapshotData.settings?.categories ?? []) {
-        if (!map.has(c.id)) map.set(c.id, { name: c.name, color: c.color });
-      }
-    }
-    return map;
-  }, [snapshots]);
+  const catMap = useMemo(() => buildCategoryMap(snapshots), [snapshots]);
 
   const getCategoryInfo = (id: string) =>
     catMap.get(id) ?? { name: getLabel(id), color: getColor(id) };
@@ -290,34 +280,45 @@ export default function TrendPage() {
         </div>
         <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={lineData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+            <ComposedChart data={lineData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="time" tick={{ fontSize: 11 }} />
+              <XAxis dataKey="time" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={16} />
+              {/* 总资产与月定投量纲差 2 个数量级，分左右轴避免月定投线贴地不可读 */}
               <YAxis
+                yAxisId="total"
                 tick={{ fontSize: 11 }}
                 width={44}
                 tickFormatter={(v) => formatMoney(Number(v)).replace('¥', '')}
               />
+              <YAxis
+                yAxisId="dca"
+                orientation="right"
+                tick={{ fontSize: 11 }}
+                width={40}
+                tickFormatter={(v) => formatMoney(Number(v)).replace('¥', '')}
+              />
               <Tooltip formatter={(value) => formatMoney(Number(value))} />
               <Line
+                yAxisId="total"
                 type="monotone"
                 dataKey="baseTotal"
                 name="底仓总额"
-                stroke="#3b82f6"
+                stroke="#19c8b9"
                 strokeWidth={2}
                 dot={{ r: 3 }}
               />
               {showDca && (
                 <Line
+                  yAxisId="dca"
                   type="monotone"
                   dataKey="dcaMonthly"
                   name="月定投"
-                  stroke="#f59e0b"
+                  stroke="#f5c31c"
                   strokeWidth={2}
                   dot={{ r: 3 }}
                 />
               )}
-            </LineChart>
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </div>

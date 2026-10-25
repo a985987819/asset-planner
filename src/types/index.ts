@@ -107,6 +107,8 @@ export interface SnapshotCompareRow {
 export interface UserSettings {
   monthlySalary: number;
   dcaRatioLimit: number;
+  /** 每月交易日数（月定投 = 日定投 × 该值），A股默认 22 */
+  monthlyTradingDays: number;
   currency: string;
   categories: CategoryDefinition[];
   watchlist: WatchlistItem[];
@@ -115,6 +117,7 @@ export interface UserSettings {
 export const DEFAULT_SETTINGS: UserSettings = {
   monthlySalary: 0,
   dcaRatioLimit: 30,
+  monthlyTradingDays: 22,
   currency: '¥',
   categories: [...DEFAULT_CATEGORIES],
   watchlist: [],

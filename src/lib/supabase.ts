@@ -4,7 +4,8 @@
 
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js';
 import type { CloudDocument } from '@/lib/dataDocument';
-import { getSyncUserId, hasIdentity } from '@/lib/syncIdentity';
+import { encryptPayload, decryptPayload } from '@/lib/cloudCrypto';
+import { getPin, getSyncUserId, hasIdentity } from '@/lib/syncIdentity';
 
 // trim 防止 GitHub Secret 粘贴时带入的尾部换行/空格导致认证失败
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
@@ -36,11 +37,12 @@ export const supabase = createClient(
 );
 
 interface CloudRow {
-  data: CloudDocument;
+  // v2 起云端存密文字符串；旧数据为明文 CloudDocument
+  data: CloudDocument | string;
   updated_at: string;
 }
 
-// 拉取整份云端文档，无记录返回 null
+// 拉取整份云端文档，无记录返回 null。云端为密文时解密；旧明文数据原样返回（下次推送升级为密文）
 export async function fetchCloudDocument(): Promise<{
   data: CloudDocument;
   updatedAt: string;
@@ -56,19 +58,34 @@ export async function fetchCloudDocument(): Promise<{
   if (error) throw error;
   if (!data) return null;
 
-  return { data: data.data, updatedAt: data.updated_at };
+  const pin = getPin();
+  const uid = getSyncUserId();
+  if (!pin) throw new Error('缺少 PIN，无法解密云端数据');
+
+  const result = await decryptPayload(data.data, pin, uid);
+  if (result.kind === 'failed') {
+    throw new Error('云端数据解密失败');
+  }
+  if (result.kind === 'decrypted') {
+    return { data: result.value as CloudDocument, updatedAt: data.updated_at };
+  }
+  return { data: data.data as CloudDocument, updatedAt: data.updated_at };
 }
 
-// 整份写入（upsert），返回服务端 updated_at
+// 整份写入（upsert），内容先经 PIN 派生密钥加密，返回服务端 updated_at
 export async function saveCloudDocument(doc: CloudDocument): Promise<string> {
   if (!isSyncEnabled()) return '';
+
+  const pin = getPin();
+  const uid = getSyncUserId();
+  if (!pin) throw new Error('缺少 PIN，无法加密云端数据');
 
   const { data, error } = await supabase
     .from('user_data')
     .upsert(
       {
-        user_id: getSyncUserId(),
-        data: doc,
+        user_id: uid,
+        data: await encryptPayload(doc, pin, uid),
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id' }

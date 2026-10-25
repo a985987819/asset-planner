@@ -42,15 +42,15 @@ export function calcDailyDCATotal(assets: Asset[]): number {
   return assets.reduce((sum, a) => sum + a.amount, 0);
 }
 
-/** 计算月定投合计 (日 × 22 个交易日) */
-export function calcMonthlyDCATotal(assets: Asset[]): number {
-  return calcDailyDCATotal(assets) * 22;
+/** 计算月定投合计（日 × 每月交易日数，默认 22，可由设置覆盖） */
+export function calcMonthlyDCATotal(assets: Asset[], tradingDays = 22): number {
+  return calcDailyDCATotal(assets) * tradingDays;
 }
 
 /** 月薪占比 */
 export function calcSalaryRatio(assets: Asset[], settings: UserSettings): number {
   if (settings.monthlySalary === 0) return 0;
-  return (calcMonthlyDCATotal(assets) / settings.monthlySalary) * 100;
+  return (calcMonthlyDCATotal(assets, settings.monthlyTradingDays) / settings.monthlySalary) * 100;
 }
 
 /** 工资约束告警：月定投是否超出比例上限 */

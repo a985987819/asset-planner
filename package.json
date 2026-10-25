@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
@@ -29,8 +30,11 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
+    "sharp": "^0.35.5",
     "tailwindcss": "^3.4.16",
     "typescript": "~5.6.2",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.0.5"
   }
 }

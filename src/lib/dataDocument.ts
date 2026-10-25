@@ -27,6 +27,8 @@ export function isPristine(doc: CloudDocument | null | undefined): boolean {
     (s.categories || []).every((c) => c.isBuiltin) &&
     !s.monthlySalary &&
     s.dcaRatioLimit === DEFAULT_SETTINGS.dcaRatioLimit &&
+    (s.monthlyTradingDays ?? DEFAULT_SETTINGS.monthlyTradingDays) ===
+      DEFAULT_SETTINGS.monthlyTradingDays &&
     s.currency === DEFAULT_SETTINGS.currency
   );
 }
@@ -44,6 +46,7 @@ export function buildDocument(): CloudDocument {
     settings: {
       monthlySalary: s.monthlySalary,
       dcaRatioLimit: s.dcaRatioLimit,
+      monthlyTradingDays: s.monthlyTradingDays,
       currency: s.currency,
       categories: s.categories,
       watchlist: s.watchlist,
@@ -83,6 +86,7 @@ export function applyDocument(doc: CloudDocument): boolean {
     useSettingsStore.setState({
       monthlySalary: s.monthlySalary ?? settingsStore.monthlySalary,
       dcaRatioLimit: s.dcaRatioLimit ?? settingsStore.dcaRatioLimit,
+      monthlyTradingDays: s.monthlyTradingDays ?? settingsStore.monthlyTradingDays,
       currency: s.currency ?? settingsStore.currency,
       categories: Array.isArray(s.categories) && s.categories.length > 0
         ? s.categories
@@ -112,5 +116,17 @@ export function importDocument(json: string): boolean {
     return applyDocument(data as CloudDocument);
   } catch {
     return false;
+  }
+}
+
+/** 解析并校验导入 JSON（不应用到状态），供导入预览使用；格式不合法返回 null */
+export function parseDocument(json: string): CloudDocument | null {
+  try {
+    const data = JSON.parse(json);
+    if (!data || !Array.isArray(data.portfolios)) return null;
+    if (!Array.isArray(data.snapshots)) data.snapshots = [];
+    return data as CloudDocument;
+  } catch {
+    return null;
   }
 }

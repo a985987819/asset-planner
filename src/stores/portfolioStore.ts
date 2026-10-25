@@ -371,6 +371,7 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
         settings: {
           monthlySalary: settings.monthlySalary,
           dcaRatioLimit: settings.dcaRatioLimit,
+          monthlyTradingDays: settings.monthlyTradingDays,
           currency: settings.currency,
           categories: settings.categories,
           watchlist: settings.watchlist,
@@ -390,9 +391,13 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
     },
 
     createDailySnapshot: () => {
-      const today = new Date().toLocaleDateString('zh-CN');
-      const label = `资产记录 ${today}`;
-      const existing = get().snapshots.find((snapshot) => snapshot.label === label);
+      const label = `资产记录 ${new Date().toLocaleDateString('zh-CN')}`;
+      // 按 createdAt 的本地年月日判断“今天已有记录”，避免依赖 label 本地化格式
+      // （跨时区/系统语言变化时 label 匹配会失效，导致同日出现两条记录）
+      const today = new Date().toDateString();
+      const existing = get().snapshots.find(
+        (snapshot) => new Date(snapshot.createdAt).toDateString() === today
+      );
 
       if (existing) {
         get().removeSnapshot(existing.id);

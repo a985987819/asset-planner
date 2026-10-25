@@ -21,6 +21,7 @@ import { ReceiptPreviewModal } from '@/components/snapshot/ReceiptPreviewModal';
 import { SnapshotManageModal } from '@/components/snapshot/SnapshotManageModal';
 import { SankeyChart } from '@/components/charts/SankeyChart';
 import { buildSankeyData } from '@/lib/sankey';
+import { aggregateRatios, toggleInSet } from '@/lib/snapshotUtils';
 
 interface AssetFormData {
   category: string;
@@ -31,24 +32,6 @@ interface AssetFormData {
 }
 
 const emptyForm: AssetFormData = { category: '', name: '', amount: '', code: '', watchlistId: '' };
-
-/** 基于资产列表重新聚合品类占比（归一化到 100%） */
-function aggregateRatios(assets: { category: string; amount: number }[]) {
-  const total = assets.reduce((s, a) => s + a.amount, 0);
-  if (total === 0) return [];
-  const byCategory = new Map<string, number>();
-  for (const a of assets) byCategory.set(a.category, (byCategory.get(a.category) || 0) + a.amount);
-  return Array.from(byCategory.entries())
-    .map(([category, amount]) => ({ category, amount, ratio: (amount / total) * 100 }))
-    .sort((a, b) => b.ratio - a.ratio);
-}
-
-function toggleInSet(value: string, set: Set<string>, setter: (s: Set<string>) => void) {
-  const next = new Set(set);
-  if (next.has(value)) next.delete(value);
-  else next.add(value);
-  setter(next);
-}
 
 export default function DCAPage() {
   const {
@@ -74,7 +57,10 @@ export default function DCAPage() {
   const portfolio = getActiveDCA();
   const assets = portfolio?.assets ?? [];
   const dailyTotal = useMemo(() => calcDailyDCATotal(assets), [assets]);
-  const monthlyTotal = useMemo(() => calcMonthlyDCATotal(assets), [assets]);
+  const monthlyTotal = useMemo(
+    () => calcMonthlyDCATotal(assets, settings.monthlyTradingDays),
+    [assets, settings.monthlyTradingDays]
+  );
   const salaryRatio = useMemo(() => calcSalaryRatio(assets, settings), [assets, settings]);
   const budgetExceeded = useMemo(
     () => isDCABudgetExceeded(assets, settings),
@@ -144,7 +130,7 @@ export default function DCAPage() {
   const latestSnapshotDaily = latestSnapshot
     ? calcDailyDCATotal(latestSnapshot.snapshotData.dcaPortfolio?.assets ?? [])
     : 0;
-  const latestSnapshotMonthly = latestSnapshotDaily * 22;
+  const latestSnapshotMonthly = latestSnapshotDaily * settings.monthlyTradingDays;
   const dailyChange = dailyTotal - latestSnapshotDaily;
 
   const firstCategoryId = categories[0]?.id ?? '';
@@ -299,7 +285,7 @@ export default function DCAPage() {
             <div className="text-lg font-bold text-gray-900">{formatMoney(dailyTotal)}</div>
           </div>
           <div>
-            <div className="mb-0.5 text-xs text-gray-400">月定投 (x22)</div>
+            <div className="mb-0.5 text-xs text-gray-400">月定投 (x{settings.monthlyTradingDays})</div>
             <div className="text-lg font-bold text-gray-900">{formatMoney(monthlyTotal)}</div>
           </div>
           <div>
@@ -513,7 +499,9 @@ export default function DCAPage() {
                       </div>
                       <div className="flex items-center gap-2 text-xs text-gray-400">
                         {asset.code && <span className="font-mono">{asset.code}</span>}
-                        <span>{getLabel(asset.category)} · 月 {formatMoney(asset.amount * 22)}</span>
+                        <span>
+                          {getLabel(asset.category)} · 月 {formatMoney(asset.amount * settings.monthlyTradingDays)}
+                        </span>
                       </div>
                     </div>
                     <div className="text-right">

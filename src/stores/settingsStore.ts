@@ -29,6 +29,11 @@ function loadSettings(): UserSettings {
         ...parsed,
         categories: [...loadedCats, ...missingBuiltins],
         watchlist: Array.isArray(parsed.watchlist) ? parsed.watchlist : [],
+        // 老数据无该字段时回退默认 22
+        monthlyTradingDays:
+          typeof parsed.monthlyTradingDays === 'number' && parsed.monthlyTradingDays > 0
+            ? parsed.monthlyTradingDays
+            : DEFAULT_SETTINGS.monthlyTradingDays,
       };
     }
   } catch {
@@ -43,6 +48,7 @@ function saveSettings(s: SettingsStore) {
     const data: UserSettings = {
       monthlySalary: s.monthlySalary,
       dcaRatioLimit: s.dcaRatioLimit,
+      monthlyTradingDays: s.monthlyTradingDays,
       currency: s.currency,
       categories: s.categories,
       watchlist: s.watchlist,
@@ -56,6 +62,7 @@ function saveSettings(s: SettingsStore) {
 interface SettingsStore extends UserSettings {
   setMonthlySalary: (salary: number) => void;
   setDCARatioLimit: (limit: number) => void;
+  setMonthlyTradingDays: (days: number) => void;
 
   // 品类管理
   addCategory: (name: string, color: string) => string;
@@ -101,6 +108,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
 
     setDCARatioLimit: (limit: number) => {
       set({ dcaRatioLimit: limit });
+      persist();
+    },
+
+    setMonthlyTradingDays: (days: number) => {
+      set({ monthlyTradingDays: Math.min(31, Math.max(1, Math.round(days) || 22)) });
       persist();
     },
 

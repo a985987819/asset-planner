@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Download,
   Upload,
@@ -12,15 +12,24 @@ import {
   Star,
   Plus,
   KeyRound,
+  Smartphone,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input } from 'animal-island-ui';
 import { usePortfolioStore } from '@/stores/portfolioStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { pullNow, pushNow, activateSync, deactivateSync } from '@/lib/sync';
+import {
+  pullNow,
+  pushNow,
+  activateSync,
+  deactivateSync,
+  getConflictBackup,
+  clearConflictBackup,
+  type ConflictBackup,
+} from '@/lib/sync';
 import { hasIdentity, getSyncUserId, setSyncIdentity, clearSyncIdentity } from '@/lib/syncIdentity';
-import { buildDocument, importDocument } from '@/lib/dataDocument';
+import { buildDocument, importDocument, parseDocument, applyDocument } from '@/lib/dataDocument';
 import { migrateLegacyData } from '@/lib/dataMigration';
 import { useCategories } from '@/hooks/useCategories';
 import { PageHeader } from '@/components/ui/Common';
@@ -28,6 +37,21 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { CategoryManageModal } from '@/components/ui/CategoryManageModal';
 import { SnapshotManageModal } from '@/components/snapshot/SnapshotManageModal';
 import { showToast } from '@/stores/toastStore';
+
+/** 导入预览摘要（应用前展示，避免误覆盖） */
+interface ImportPreview {
+  exportedAt: string | null;
+  baseCount: number;
+  dcaCount: number;
+  snapshotCount: number;
+  hasSettings: boolean;
+}
+
+/** 浏览器安装提示事件（Chrome/Edge 等 Android 桌面环境触发） */
+interface InstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
 
 export default function SettingsPage() {
   const settings = useSettingsStore();
@@ -38,6 +62,8 @@ export default function SettingsPage() {
     snapshots,
     removeSnapshot,
     restoreSnapshot,
+    basePortfolios,
+    dcaPortfolios,
   } = usePortfolioStore();
 
   const { categories } = useCategories();
@@ -57,6 +83,36 @@ export default function SettingsPage() {
   const [identityError, setIdentityError] = useState('');
   const [clearOpen, setClearOpen] = useState(false);
   const [clearIdentityOpen, setClearIdentityOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [pendingImportJson, setPendingImportJson] = useState('');
+  const [conflictBackup, setConflictBackup] = useState<ConflictBackup | null>(null);
+  const [restoreBackupOpen, setRestoreBackupOpen] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+
+  // 挂载时读取冲突备份（同步冲突时自动写入）
+  useEffect(() => {
+    setConflictBackup(getConflictBackup());
+  }, []);
+
+  // 浏览器触发安装提示时暂存，供"安装到主屏幕"按钮使用
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e as InstallPromptEvent);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+  const handleInstall = async () => {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    if (choice.outcome === 'accepted') showToast('已添加到主屏幕');
+    setInstallPrompt(null);
+  };
 
   const checkCategoryInAssets = (categoryId: string): boolean => {
     const { basePortfolios, dcaPortfolios } = usePortfolioStore.getState();
@@ -88,15 +144,35 @@ export default function SettingsPage() {
     const reader = new FileReader();
     reader.onload = (loadEvent) => {
       const json = loadEvent.target?.result as string;
-      const success = importDocument(json);
-      if (success) {
-        showToast('数据导入成功');
-      } else {
+      // 先解析生成预览，用户确认后才覆盖，避免选错文件直接丢数据
+      const doc = parseDocument(json);
+      if (!doc) {
         showToast('导入失败：文件格式不正确', 'error');
+        return;
       }
+      setPendingImportJson(json);
+      setImportPreview({
+        exportedAt: doc.exportedAt || null,
+        baseCount: doc.portfolios.filter((p) => p.type === 'base').length,
+        dcaCount: doc.portfolios.filter((p) => p.type === 'dca').length,
+        snapshotCount: doc.snapshots.length,
+        hasSettings: Boolean(doc.settings),
+      });
     };
     reader.readAsText(file);
     event.target.value = '';
+  };
+
+  const confirmImport = () => {
+    const ok = importDocument(pendingImportJson);
+    showToast(ok ? '数据导入成功' : '导入失败：文件格式不正确', ok ? 'success' : 'error');
+    setImportPreview(null);
+    setPendingImportJson('');
+  };
+
+  const cancelImport = () => {
+    setImportPreview(null);
+    setPendingImportJson('');
   };
 
   const handleCategoryDelete = (categoryId: string) => {
@@ -230,6 +306,22 @@ export default function SettingsPage() {
             </div>
             <p className="mt-1 text-xs text-gray-400">月定投额超出月薪 x 此比例时触发告警</p>
           </div>
+          <div>
+            <label className="label">每月交易日数</label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min="1"
+                max="31"
+                value={settings.monthlyTradingDays}
+                onChange={(event) =>
+                  settings.setMonthlyTradingDays(parseInt(event.target.value) || 22)
+                }
+              />
+              <span className="text-sm text-gray-400">天</span>
+            </div>
+            <p className="mt-1 text-xs text-gray-400">月定投 = 日定投 × 每月交易日（A 股约 22，美股约 21）</p>
+          </div>
         </div>
       </div>
 
@@ -298,6 +390,32 @@ export default function SettingsPage() {
 
       <div className="card mb-4">
         <h3 className="mb-3 text-sm font-medium text-gray-700">数据管理</h3>
+
+        {conflictBackup && (
+          <div className="mb-3 rounded-xl border border-warning-100 bg-warning-50 p-3">
+            <div className="text-xs font-medium text-yellow-700">
+              云端数据备份（{new Date(conflictBackup.cloudUpdatedAt).toLocaleString('zh-CN')} 的版本，
+              同步冲突时被本设备覆盖）
+            </div>
+            <div className="mt-2 flex gap-2">
+              <Button size="small" block onClick={() => setRestoreBackupOpen(true)}>
+                恢复该版本
+              </Button>
+              <Button
+                size="small"
+                danger
+                onClick={() => {
+                  clearConflictBackup();
+                  setConflictBackup(null);
+                  showToast('已删除云端备份');
+                }}
+              >
+                忽略
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-2">
           <Button onClick={() => setSnapshotModalOpen(true)} block className="justify-between">
             <span className="flex items-center gap-2">
@@ -412,7 +530,10 @@ export default function SettingsPage() {
           </p>
           <div className="flex gap-2">
             <Button
-              onClick={() => pullNow()}
+              onClick={async () => {
+                await pullNow();
+                setConflictBackup(getConflictBackup());
+              }}
               disabled={syncStatus === 'syncing'}
               loading={syncStatus === 'syncing'}
               type="primary"
@@ -427,6 +548,30 @@ export default function SettingsPage() {
             </Button>
           </div>
         </div>
+      </div>
+
+      <div className="card mb-4">
+        <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+          <Smartphone size={15} />
+          移动端安装
+        </h3>
+        <p className="mb-3 text-xs text-gray-400">
+          安装后可从手机主屏图标直接进入，无需浏览器地址栏。数据保存在本机，离线也能查看和记录；
+          配合云同步可在多台设备间保持一致。
+        </p>
+        {installPrompt ? (
+          <Button type="primary" size="small" block onClick={handleInstall}>
+            安装到主屏幕
+          </Button>
+        ) : isIOS ? (
+          <div className="rounded-lg bg-gray-50 p-2.5 text-xs text-gray-500">
+            在 Safari 中打开本页，点击底部「分享」按钮，选择「添加到主屏幕」即可。
+          </div>
+        ) : (
+          <div className="rounded-lg bg-gray-50 p-2.5 text-xs text-gray-500">
+            在浏览器菜单中选择「安装应用」或「添加到主屏幕」即可。
+          </div>
+        )}
       </div>
 
       <ConfirmModal
@@ -453,6 +598,61 @@ export default function SettingsPage() {
           setClearIdentityOpen(false);
         }}
         onCancel={() => setClearIdentityOpen(false)}
+      />
+
+      <ConfirmModal
+        open={importPreview !== null}
+        title="导入备份"
+        confirmText="覆盖并导入"
+        danger
+        onConfirm={confirmImport}
+        onCancel={cancelImport}
+        description={
+          importPreview && (
+            <div className="space-y-2 text-left">
+              <div className="rounded-lg bg-gray-50 p-2.5 text-xs text-gray-600">
+                <div>
+                  备份文件
+                  {importPreview.exportedAt
+                    ? `（导出于 ${new Date(importPreview.exportedAt).toLocaleString('zh-CN')}）`
+                    : ''}
+                  ：
+                </div>
+                <div className="mt-1">
+                  底仓 {importPreview.baseCount} 个方案 · 定投 {importPreview.dcaCount} 个方案 ·{' '}
+                  {importPreview.snapshotCount} 条快照
+                  {importPreview.hasSettings ? ' · 含设置' : ''}
+                </div>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-2.5 text-xs text-gray-600">
+                <div>当前数据：</div>
+                <div className="mt-1">
+                  底仓 {basePortfolios.length} 个方案 · 定投 {dcaPortfolios.length} 个方案 ·{' '}
+                  {snapshots.length} 条快照
+                </div>
+              </div>
+              <p className="text-xs text-red-500">导入将覆盖当前所有数据，此操作不可恢复。</p>
+            </div>
+          )
+        }
+      />
+
+      <ConfirmModal
+        open={restoreBackupOpen}
+        title="恢复云端备份"
+        description={`将用 ${conflictBackup ? new Date(conflictBackup.cloudUpdatedAt).toLocaleString('zh-CN') : ''} 的云端版本覆盖当前所有数据。当前数据建议先「导出 JSON」备份。`}
+        confirmText="覆盖恢复"
+        danger
+        onConfirm={() => {
+          if (conflictBackup) {
+            applyDocument(conflictBackup.doc);
+            clearConflictBackup();
+            setConflictBackup(null);
+            showToast('已恢复被覆盖的云端版本');
+          }
+          setRestoreBackupOpen(false);
+        }}
+        onCancel={() => setRestoreBackupOpen(false)}
       />
 
       <SnapshotManageModal

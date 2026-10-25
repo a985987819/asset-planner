@@ -83,7 +83,10 @@ export default function DashboardPage() {
   );
 
   const dailyDCA = useMemo(() => calcDailyDCATotal(dcaAssets), [dcaAssets]);
-  const monthlyDCA = useMemo(() => calcMonthlyDCATotal(dcaAssets), [dcaAssets]);
+  const monthlyDCA = useMemo(
+    () => calcMonthlyDCATotal(dcaAssets, settings.monthlyTradingDays),
+    [dcaAssets, settings.monthlyTradingDays]
+  );
   const salaryRatio = useMemo(() => calcSalaryRatio(dcaAssets, settings), [dcaAssets, settings]);
   const budgetExceeded = useMemo(
     () => isDCABudgetExceeded(dcaAssets, settings),
@@ -134,7 +137,7 @@ export default function DashboardPage() {
           value={formatMoney(dailyDCA)}
           sub={dcaAssets.length > 0 ? `${dcaAssets.length} 个品种` : undefined}
         />
-        <StatCard label="月定投额 (x22)" value={formatMoney(monthlyDCA)} />
+        <StatCard label={`月定投额 (x${settings.monthlyTradingDays})`} value={formatMoney(monthlyDCA)} />
         <StatCard
           label="月薪占比"
           value={settings.monthlySalary > 0 ? formatPercent(salaryRatio) : '未设置'}

@@ -14,6 +14,7 @@ import { ReceiptPreviewModal } from '@/components/snapshot/ReceiptPreviewModal';
 import { SnapshotManageModal } from '@/components/snapshot/SnapshotManageModal';
 import { SankeyChart } from '@/components/charts/SankeyChart';
 import { buildSankeyData } from '@/lib/sankey';
+import { aggregateRatios, toggleInSet } from '@/lib/snapshotUtils';
 
 interface AssetFormData {
   category: string;
@@ -27,24 +28,6 @@ const emptyForm: AssetFormData = { category: '', name: '', amount: '', code: '',
 
 function getSnapshotBaseTotal(snapshot: Snapshot) {
   return calcBaseTotal(snapshot.snapshotData.basePortfolio.assets ?? []);
-}
-
-/** 基于资产列表重新聚合品类占比（归一化到 100%） */
-function aggregateRatios(assets: { category: string; amount: number }[]) {
-  const total = assets.reduce((s, a) => s + a.amount, 0);
-  if (total === 0) return [];
-  const byCategory = new Map<string, number>();
-  for (const a of assets) byCategory.set(a.category, (byCategory.get(a.category) || 0) + a.amount);
-  return Array.from(byCategory.entries())
-    .map(([category, amount]) => ({ category, amount, ratio: (amount / total) * 100 }))
-    .sort((a, b) => b.ratio - a.ratio);
-}
-
-function toggleInSet(value: string, set: Set<string>, setter: (s: Set<string>) => void) {
-  const next = new Set(set);
-  if (next.has(value)) next.delete(value);
-  else next.add(value);
-  setter(next);
 }
 
 export default function BasePage() {
