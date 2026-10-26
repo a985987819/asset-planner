@@ -42,6 +42,14 @@ export function SnapshotManageModal({
   const redundant = useMemo(() => analyzeRedundantSnapshots(snapshots).redundant, [snapshots]);
   const redundantIds = useMemo(() => new Set(redundant.map((s) => s.id)), [redundant]);
 
+  // 每条快照的"上一期"（时间上更早的一条）：预建映射，避免列表渲染时 O(n²) 查找
+  const prevMap = useMemo(() => {
+    const asc = [...snapshots].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const map = new Map<string, Snapshot>();
+    for (let i = 1; i < asc.length; i++) map.set(asc[i].id, asc[i - 1]);
+    return map;
+  }, [snapshots]);
+
   const groupedSnapshots = useMemo(() => {
     const map = new Map<string, Snapshot[]>();
     for (const snapshot of snapshots) {
@@ -116,10 +124,7 @@ export function SnapshotManageModal({
                   </div>
                   <div className="space-y-2">
                     {items.map((snapshot) => {
-                      // snapshots 为最新在前，find 返回时间上一条
-                      const prev = snapshots.find(
-                        (s) => s.id !== snapshot.id && s.createdAt.localeCompare(snapshot.createdAt) < 0
-                      );
+                      const prev = prevMap.get(snapshot.id);
                       const isSelected = compareSelected.includes(snapshot.id);
                       // 守卫：导入/旧版快照可能缺 basePortfolio，避免整页崩溃
                       const total = (snapshot.snapshotData.basePortfolio?.assets ?? []).reduce(

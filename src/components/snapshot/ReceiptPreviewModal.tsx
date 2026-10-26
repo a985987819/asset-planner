@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Download, Save } from 'lucide-react';
 import { Button } from 'animal-island-ui';
-import html2canvas from 'html2canvas';
+import type html2canvasType from 'html2canvas';
 import { Modal } from '@/components/ui/Modal';
 import { ReceiptCard } from './ReceiptCard';
 import { usePortfolioStore } from '@/stores/portfolioStore';
@@ -38,6 +38,8 @@ export function ReceiptPreviewModal({ open, onClose, snapshot }: ReceiptPreviewM
     if (!cardRef.current) return;
     setCapturing(true);
     try {
+      // 按需加载（约 200KB 依赖）：仅导出小票图片时才拉取
+      const html2canvas: typeof html2canvasType = (await import('html2canvas')).default;
       const canvas = await html2canvas(cardRef.current, {
         backgroundColor: '#fefefe',
         scale: 2,

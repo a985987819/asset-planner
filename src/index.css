@@ -66,3 +66,91 @@
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 }
+
+/* ============================================================
+   动效 — 与 animal-island-ui 同规范：0.15~0.35s、柔和缓动
+   ============================================================ */
+@keyframes animal-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes animal-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes animal-tab-pop {
+  0% {
+    transform: scale(0.85);
+  }
+  60% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 页面切换入场（App.tsx 以 key=路径 重挂载触发） */
+.page-enter {
+  animation: animal-page-in 0.28s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* 卡片浮入 + 悬停轻微上浮 */
+.card {
+  animation: animal-rise-in 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+  transition:
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--animal-shadow-base);
+}
+
+/* 同屏多卡错峰入场：给容器加 .stagger */
+.stagger > *:nth-child(2) {
+  animation-delay: 50ms;
+}
+.stagger > *:nth-child(3) {
+  animation-delay: 100ms;
+}
+.stagger > *:nth-child(4) {
+  animation-delay: 150ms;
+}
+.stagger > *:nth-child(5) {
+  animation-delay: 200ms;
+}
+.stagger > *:nth-child(n + 6) {
+  animation-delay: 250ms;
+}
+
+/* 底部导航激活弹跳 */
+.tab-item-active {
+  animation: animal-tab-pop 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 无障碍：用户偏好减少动效时全部关闭 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+

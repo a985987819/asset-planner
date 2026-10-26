@@ -127,7 +127,7 @@ export default function DashboardPage() {
     <div className="pb-20" id="dashboard-page">
       <PageHeader title="资产总览" subtitle="底仓配置 + 定投计划" />
 
-      <div id="dashboard-stats" className="grid grid-cols-2 gap-3 mb-5">
+      <div id="dashboard-stats" className="stagger grid grid-cols-2 gap-3 mb-5">
         <StatCard
           label="底仓总额"
           value={formatMoney(baseTotal)}

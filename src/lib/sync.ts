@@ -218,15 +218,19 @@ export async function pullNow(): Promise<boolean> {
   }
 }
 
-const debouncedPush = debounce(() => pushNow(), 800);
 const debouncedPull = debounce(() => pullNow(), 300);
 
-// 数据变更后调用：内容未变化则跳过
-// 以 syncStarted 为门（而非 isSyncEnabled），身份切换间隙的 store 写不会提前推送
+// 防抖后一次性计算指纹（避免每次按键都对全量文档 JSON.stringify），变化才推送
+const debouncedCheckAndPush = debounce(() => {
+  if (documentFingerprint(buildDocument()) === lastPushedFingerprint) return;
+  pushNow();
+}, 800);
+
+// 数据变更后调用：以 syncStarted 为门（而非 isSyncEnabled），
+// 身份切换间隙的 store 写不会提前推送
 export function schedulePush() {
   if (!syncStarted) return;
-  if (documentFingerprint(buildDocument()) === lastPushedFingerprint) return;
-  debouncedPush();
+  debouncedCheckAndPush();
 }
 
 // 需要拉取时调用
@@ -294,7 +298,7 @@ export function activateSync(): void {
 export function deactivateSync(): void {
   cleanupSync?.();
   // 取消 pending 的 debounce 推送/拉取，防止旧身份状态被推进新身份的云端行
-  debouncedPush.cancel();
+  debouncedCheckAndPush.cancel();
   debouncedPull.cancel();
   lastPushedAt = null;
   lastPushedFingerprint = '';

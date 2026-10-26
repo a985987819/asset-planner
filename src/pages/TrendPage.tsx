@@ -234,7 +234,9 @@ export default function TrendPage() {
   const getCategoryInfo = (id: string) =>
     catMap.get(id) ?? { name: getLabel(id), color: getColor(id) };
 
-  const buildSankey = (snapshot: Snapshot) => {
+  // 无快照时（<2 期提前返回前的调用也安全）返回空数据，避免 undefined 崩溃
+  const buildSankey = (snapshot: Snapshot | undefined) => {
+    if (!snapshot) return { total: 0, categories: [] };
     const assets =
       sankeyPortfolio === 'base'
         ? snapshot.snapshotData.basePortfolio?.assets ?? []

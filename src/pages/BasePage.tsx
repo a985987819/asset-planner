@@ -110,8 +110,11 @@ export default function BasePage() {
   const visibleTotal = ratios.reduce((s, i) => s + i.amount, 0);
 
   // 桑基图：总资产 → 品类 → 具体基金（与饼图同口径，随隐藏/排除联动）
-  const getCategoryInfo = (id: string) => ({ name: getLabel(id), color: getColor(id) });
-  const sankeyData = buildSankeyData(chartAssets, getCategoryInfo);
+  // 桑基数据 memo 化：避免每次渲染重建全量图数据
+  const sankeyData = useMemo(() => {
+    const getCategoryInfo = (id: string) => ({ name: getLabel(id), color: getColor(id) });
+    return buildSankeyData(chartAssets, getCategoryInfo);
+  }, [chartAssets, getLabel, getColor]);
 
   const latestSnapshot = snapshots[0] ?? null;
   const latestSnapshotTotal = latestSnapshot ? getSnapshotBaseTotal(latestSnapshot) : 0;
