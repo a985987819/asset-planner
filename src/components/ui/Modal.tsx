@@ -42,6 +42,8 @@ export function Modal({
       width={WIDTH_MAP[maxWidth] ?? 448}
       maskClosable={closeOnOverlay}
       footer={null}
+      // 数据密集型弹窗关闭打字机效果，内容即刻完整呈现
+      typewriter={false}
       title={
         <div className="flex w-full items-center justify-between gap-2">
           <span>{title}</span>

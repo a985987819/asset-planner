@@ -61,6 +61,7 @@ export default function SettingsPage() {
     clearAll,
     snapshots,
     removeSnapshot,
+    removeSnapshots,
     restoreSnapshot,
     basePortfolios,
     dcaPortfolios,
@@ -660,6 +661,7 @@ export default function SettingsPage() {
         onClose={() => setSnapshotModalOpen(false)}
         snapshots={snapshots}
         removeSnapshot={removeSnapshot}
+        removeSnapshots={removeSnapshots}
         restoreSnapshot={restoreSnapshot}
       />
 

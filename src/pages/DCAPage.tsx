@@ -47,6 +47,7 @@ export default function DCAPage() {
     snapshots,
     createDailySnapshot,
     removeSnapshot: removeStoredSnapshot,
+    removeSnapshots: removeStoredSnapshots,
     restoreSnapshot,
   } = usePortfolioStore();
 
@@ -103,7 +104,7 @@ export default function DCAPage() {
       const oa = catOrder.get(a.category) ?? 999;
       const ob = catOrder.get(b.category) ?? 999;
       if (oa !== ob) return oa - ob;
-      return a.sortOrder - b.sortOrder;
+      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
     });
   }, [categoryAssets, search, categories]);
 
@@ -715,6 +716,7 @@ export default function DCAPage() {
         onClose={() => setHistoryOpen(false)}
         snapshots={snapshots}
         removeSnapshot={removeStoredSnapshot}
+        removeSnapshots={removeStoredSnapshots}
         restoreSnapshot={restoreSnapshot}
       />
     </div>

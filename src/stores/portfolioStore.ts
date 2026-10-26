@@ -103,6 +103,7 @@ interface PortfolioStore {
   createSnapshot: (label: string) => void;
   createDailySnapshot: () => void;
   removeSnapshot: (id: string) => void;
+  removeSnapshots: (ids: string[]) => void;
   restoreSnapshot: (id: string) => void;
 
   // 同步状态
@@ -411,32 +412,46 @@ export const usePortfolioStore = create<PortfolioStore>((set, get) => {
       persist();
     },
 
+    removeSnapshots: (ids) => {
+      const targets = new Set(ids);
+      set((s) => ({ snapshots: s.snapshots.filter((sn) => !targets.has(sn.id)) }));
+      persist();
+    },
+
     restoreSnapshot: (id) => {
       const snapshot = get().snapshots.find((s) => s.id === id);
       if (!snapshot) return;
 
-      const { basePortfolio, dcaPortfolio, settings } = snapshot.snapshotData;
+      const { basePortfolio, dcaPortfolio } = snapshot.snapshotData;
+      // 旧版/导入快照可能缺 settings，逐字段兜底
+      const settings = snapshot.snapshotData.settings ??
+        ({ monthlySalary: 0, dcaRatioLimit: 30, monthlyTradingDays: 22, currency: '¥', categories: [], watchlist: [] } as NonNullable<Snapshot['snapshotData']['settings']>);
 
-      // 恢复底仓
+      // 只恢复资产数据到当前激活方案，保留方案自身的 id/name/type。
+      // 若整体替换，快照里旧方案的 id 会覆盖当前方案，
+      // 导致方案列表出现重复 id 且 activeBaseId 悬空（表现为数据"消失"）。
       set((state) => {
         const newBase = state.basePortfolios.map((p) =>
           p.id === state.activeBaseId
-            ? { ...basePortfolio, updatedAt: new Date().toISOString() }
+            ? { ...p, assets: basePortfolio.assets, updatedAt: new Date().toISOString() }
             : p
         );
 
         const newDCA = state.dcaPortfolios.map((p) =>
           p.id === state.activeDCAId
-            ? { ...dcaPortfolio, updatedAt: new Date().toISOString() }
+            ? { ...p, assets: dcaPortfolio.assets, updatedAt: new Date().toISOString() }
             : p
         );
 
-        return { basePortfolios: newBase, dcaPortfolios: newDCA } as any;
+        return { basePortfolios: newBase, dcaPortfolios: newDCA };
       });
 
       // 恢复设置
       useSettingsStore.getState().setMonthlySalary(settings.monthlySalary);
       useSettingsStore.getState().setDCARatioLimit(settings.dcaRatioLimit);
+      if (typeof settings.monthlyTradingDays === 'number') {
+        useSettingsStore.getState().setMonthlyTradingDays(settings.monthlyTradingDays);
+      }
       // 恢复品类和自选
       if (settings.categories) {
         useSettingsStore.setState({ categories: settings.categories });

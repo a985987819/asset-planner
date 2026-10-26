@@ -27,7 +27,7 @@ interface AssetFormData {
 const emptyForm: AssetFormData = { category: '', name: '', amount: '', code: '', watchlistId: '' };
 
 function getSnapshotBaseTotal(snapshot: Snapshot) {
-  return calcBaseTotal(snapshot.snapshotData.basePortfolio.assets ?? []);
+  return calcBaseTotal(snapshot.snapshotData.basePortfolio?.assets ?? []);
 }
 
 export default function BasePage() {
@@ -44,6 +44,7 @@ export default function BasePage() {
     snapshots,
     createDailySnapshot,
     removeSnapshot: removeStoredSnapshot,
+    removeSnapshots: removeStoredSnapshots,
     restoreSnapshot,
   } = usePortfolioStore();
 
@@ -90,7 +91,7 @@ export default function BasePage() {
       const oa = catOrder.get(a.category) ?? 999;
       const ob = catOrder.get(b.category) ?? 999;
       if (oa !== ob) return oa - ob;
-      return a.sortOrder - b.sortOrder;
+      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
     });
   }, [categoryAssets, search, categories]);
 
@@ -653,6 +654,7 @@ export default function BasePage() {
         onClose={() => setHistoryOpen(false)}
         snapshots={snapshots}
         removeSnapshot={removeStoredSnapshot}
+        removeSnapshots={removeStoredSnapshots}
         restoreSnapshot={restoreSnapshot}
       />
     </div>

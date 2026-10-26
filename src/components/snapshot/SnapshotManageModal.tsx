@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Trash2, Eye, GitCompare, Copy, TrendingUp } from 'lucide-react';
+import { Trash2, Eye, GitCompare, Copy, TrendingUp, Sparkles } from 'lucide-react';
 import { Button, Checkbox } from 'animal-island-ui';
 import type { Snapshot } from '@/types';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { formatMoney } from '@/lib/calculations';
+import { analyzeRedundantSnapshots } from '@/lib/snapshotRetention';
+import { showToast } from '@/stores/toastStore';
 import { ReceiptPreviewModal } from './ReceiptPreviewModal';
 import { SnapshotCompareModal } from './SnapshotCompareModal';
 
@@ -13,6 +15,7 @@ interface SnapshotManageModalProps {
   onClose: () => void;
   snapshots: Snapshot[];
   removeSnapshot: (id: string) => void;
+  removeSnapshots: (ids: string[]) => void;
   restoreSnapshot: (id: string) => void;
 }
 
@@ -25,6 +28,7 @@ export function SnapshotManageModal({
   onClose,
   snapshots,
   removeSnapshot,
+  removeSnapshots,
   restoreSnapshot,
 }: SnapshotManageModalProps) {
   const [receiptSnapshot, setReceiptSnapshot] = useState<Snapshot | null>(null);
@@ -32,6 +36,11 @@ export function SnapshotManageModal({
   const [compareSnapshots, setCompareSnapshots] = useState<Snapshot[]>([]);
   const [restoreTarget, setRestoreTarget] = useState<Snapshot | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Snapshot | null>(null);
+  const [pruneOpen, setPruneOpen] = useState(false);
+
+  // 分层留存策略分析出的冗余快照（同天/同周/同月内较早的记录）
+  const redundant = useMemo(() => analyzeRedundantSnapshots(snapshots).redundant, [snapshots]);
+  const redundantIds = useMemo(() => new Set(redundant.map((s) => s.id)), [redundant]);
 
   const groupedSnapshots = useMemo(() => {
     const map = new Map<string, Snapshot[]>();
@@ -90,6 +99,15 @@ export function SnapshotManageModal({
               </div>
             )}
 
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs text-gray-400">共 {snapshots.length} 条记录</span>
+              {redundant.length > 0 && (
+                <Button type="text" size="small" icon={<Sparkles size={13} />} onClick={() => setPruneOpen(true)}>
+                  智能清理 {redundant.length} 条冗余
+                </Button>
+              )}
+            </div>
+
             <div className="max-h-96 space-y-4 overflow-y-auto">
               {groupedSnapshots.map(([date, items]) => (
                 <div key={date}>
@@ -103,10 +121,20 @@ export function SnapshotManageModal({
                         (s) => s.id !== snapshot.id && s.createdAt.localeCompare(snapshot.createdAt) < 0
                       );
                       const isSelected = compareSelected.includes(snapshot.id);
-                      const total = snapshot.snapshotData.basePortfolio.assets.reduce(
+                      // 守卫：导入/旧版快照可能缺 basePortfolio，避免整页崩溃
+                      const total = (snapshot.snapshotData.basePortfolio?.assets ?? []).reduce(
                         (sum, asset) => sum + asset.amount,
                         0
                       );
+                      // 较上一期（时间上更早的记录）的变化，让留存列表本身可对比
+                      const prevTotal = prev
+                        ? (prev.snapshotData.basePortfolio?.assets ?? []).reduce(
+                            (sum, asset) => sum + asset.amount,
+                            0
+                          )
+                        : null;
+                      const diff = prevTotal === null ? null : total - prevTotal;
+                      const diffPct = prevTotal && prevTotal > 0 ? (diff! / prevTotal) * 100 : null;
 
                       return (
                         <div
@@ -139,6 +167,25 @@ export function SnapshotManageModal({
                             </div>
                             <div className="mt-0.5 text-xs text-primary-600">
                               总资产 {formatMoney(total)}
+                            </div>
+                            <div
+                              className={`text-xs ${
+                                diff === null || diff === 0
+                                  ? 'text-gray-400'
+                                  : diff > 0
+                                  ? 'text-green-600'
+                                  : 'text-red-600'
+                              }`}
+                            >
+                              {diff === null
+                                ? '最早记录'
+                                : diff === 0
+                                ? '较上期持平'
+                                : `较上期 ${diff > 0 ? '+' : ''}${formatMoney(diff)}${
+                                    diffPct !== null
+                                      ? `（${diffPct > 0 ? '+' : ''}${diffPct.toFixed(1)}%）`
+                                      : ''
+                                  }`}
                             </div>
                           </div>
 
@@ -226,6 +273,23 @@ export function SnapshotManageModal({
           setDeleteTarget(null);
         }}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmModal
+        open={pruneOpen}
+        title="智能清理冗余快照"
+        description={`按分层策略保留：最近 30 天全部保留，30 天至 6 个月每周保留最新一条，更早的每月保留最新一条。共可清理 ${redundant.length} 条，保留 ${
+          snapshots.length - redundant.length
+        } 条。被清理的记录不可恢复。`}
+        confirmText="清理"
+        danger
+        onConfirm={() => {
+          removeSnapshots(redundant.map((s) => s.id));
+          setCompareSelected((prevIds) => prevIds.filter((id) => !redundantIds.has(id)));
+          setPruneOpen(false);
+          showToast(`已清理 ${redundant.length} 条冗余记录`);
+        }}
+        onCancel={() => setPruneOpen(false)}
       />
 
       {compareSnapshots.length >= 2 && (

@@ -6,9 +6,13 @@
 import { useMemo, useState } from 'react';
 import {
   ComposedChart,
+  LineChart,
   Line,
   AreaChart,
   Area,
+  BarChart,
+  Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -56,6 +60,30 @@ function TrendTooltip({ active, payload, label, getLabel, formatValue }: TrendTo
           <span className="ml-auto font-medium text-gray-900">{formatValue(entry.value)}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+interface ChangeTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    payload: { time: string; from: string; change: number; pct: number | null };
+  }>;
+}
+
+function ChangeTooltip({ active, payload }: ChangeTooltipProps) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
+  return (
+    <div className="bg-white shadow-lg rounded-lg border border-gray-100 px-3 py-2 text-sm">
+      <div className="font-medium text-gray-900 mb-1">
+        {row.from} → {row.time}
+      </div>
+      <div className={row.change >= 0 ? 'text-green-600' : 'text-red-600'}>
+        {row.change >= 0 ? '+' : ''}
+        {formatMoney(row.change)}
+        {row.pct !== null && `（${row.pct > 0 ? '+' : ''}${row.pct.toFixed(1)}%）`}
+      </div>
     </div>
   );
 }
@@ -174,6 +202,22 @@ export default function TrendPage() {
   const totalChange = latestTotal - prevTotal;
   const changePct = prevTotal > 0 ? (totalChange / prevTotal) * 100 : 0;
 
+  // 逐期变化：相邻两期底仓差额（涨跌柱状图数据）
+  const changeData = useMemo(
+    () =>
+      perSnapshot.slice(1).map((p, i) => {
+        const prevPoint = perSnapshot[i];
+        const change = p.baseTotal - prevPoint.baseTotal;
+        return {
+          time: p.time,
+          from: prevPoint.time,
+          change,
+          pct: prevPoint.baseTotal > 0 ? (change / prevPoint.baseTotal) * 100 : null,
+        };
+      }),
+    [perSnapshot]
+  );
+
   // 记录概览跨度
   const span = useMemo(() => {
     if (sorted.length < 2) return '';
@@ -255,6 +299,41 @@ export default function TrendPage() {
             >
               查看明细对比
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* 逐期变化：相邻两期底仓差额涨跌柱 */}
+      {changeData.length > 0 && (
+        <div className="card mb-4" id="trend-change-bars">
+          <div className="mb-3 flex items-center gap-2">
+            <TrendingUp size={18} className="text-primary-600" />
+            <h2 className="text-base font-semibold text-gray-900">逐期变化</h2>
+            <span className="ml-auto text-xs text-gray-400">相邻两期底仓差额</span>
+          </div>
+          <div className="h-36">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={changeData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis
+                  dataKey="time"
+                  tick={{ fontSize: 10 }}
+                  interval="preserveStartEnd"
+                  minTickGap={12}
+                />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  width={44}
+                  tickFormatter={(v) => formatMoney(Number(v)).replace('¥', '')}
+                />
+                <Tooltip content={<ChangeTooltip />} cursor={{ fill: 'rgba(121, 79, 39, 0.06)' }} />
+                <Bar dataKey="change" radius={[3, 3, 0, 0]} maxBarSize={36}>
+                  {changeData.map((d, i) => (
+                    <Cell key={i} fill={d.change >= 0 ? '#6fba2c' : '#e05a5a'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}

@@ -49,6 +49,7 @@ export default function DashboardPage() {
   const snapshots = usePortfolioStore((s) => s.snapshots);
   const createDailySnapshot = usePortfolioStore((s) => s.createDailySnapshot);
   const removeSnapshot = usePortfolioStore((s) => s.removeSnapshot);
+  const removeSnapshots = usePortfolioStore((s) => s.removeSnapshots);
   const restoreSnapshot = usePortfolioStore((s) => s.restoreSnapshot);
   const settings = useSettingsStore();
   const { getLabel, getColor } = useCategories();
@@ -327,6 +328,7 @@ export default function DashboardPage() {
         onClose={() => setHistoryOpen(false)}
         snapshots={snapshots}
         removeSnapshot={removeSnapshot}
+        removeSnapshots={removeSnapshots}
         restoreSnapshot={restoreSnapshot}
       />
     </div>

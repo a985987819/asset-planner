@@ -163,6 +163,14 @@ export async function pullNow(): Promise<boolean> {
             saveSyncState(lastPushedAt, lastPushedFingerprint);
             setStatus('synced');
           } else {
+            // 本机已有数据且云端也非空：本机优先，但先备份云端版本，避免静默覆盖
+            if (!isPristine(remote.data)) {
+              stashConflictBackup(remote.data, remote.updatedAt);
+              showToast(
+                '云端已有其他数据，已按本设备数据为准；云端原版本已自动备份，可在「设置 → 数据管理」恢复',
+                'info'
+              );
+            }
             await pushNow();
           }
           return true;

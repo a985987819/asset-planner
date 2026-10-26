@@ -73,6 +73,12 @@ describe('格式化与工具', () => {
     expect(formatMoney(1234.5)).toBe('¥1,234.5');
   });
 
+  it('formatMoney 负数：符号在货币符前，且大额负数同样转万', () => {
+    expect(formatMoney(-4000)).toBe('-¥4,000');
+    expect(formatMoney(-15000)).toBe('-¥1.50万');
+    expect(formatMoney(0)).toBe('¥0');
+  });
+
   it('formatPercent 保留指定小数位', () => {
     expect(formatPercent(12.345)).toBe('12.3%');
     expect(formatPercent(12.345, 2)).toBe('12.35%');

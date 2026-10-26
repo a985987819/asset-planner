@@ -70,12 +70,14 @@ export function generateId(): string {
   return crypto.randomUUID();
 }
 
-/** 格式化金额 */
+/** 格式化金额（负数输出 "-¥4,000"，大额转万） */
 export function formatMoney(amount: number, currency = '¥'): string {
-  if (amount >= 10000) {
-    return `${currency}${(amount / 10000).toFixed(2)}万`;
+  const sign = amount < 0 ? '-' : '';
+  const abs = Math.abs(amount);
+  if (abs >= 10000) {
+    return `${sign}${currency}${(abs / 10000).toFixed(2)}万`;
   }
-  return `${currency}${amount.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`;
+  return `${sign}${currency}${abs.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`;
 }
 
 /** 格式化百分比 */
